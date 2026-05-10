@@ -1,3 +1,5 @@
 ## Setup
 
-This markdown file outlines the basics steps you take to have the server/app up and running.
+See specific setup guides for each service / API / application below:
+
+- [API Setup Guide](./api/docs/setup.md)
