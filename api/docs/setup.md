@@ -34,7 +34,7 @@ docker compose down -v &&\
 docker compose up -d
 ```
 
-This will shut down any previously running containers then start the services listed in the Docker Compose yaml file in the background.
+This will shut down any previously running containers then start the services listed under the Docker Compose yaml file in the background.
 
 To inspect logs for any such service, use:
 
