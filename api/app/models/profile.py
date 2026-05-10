@@ -1,18 +1,20 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql.functions import func
 from sqlalchemy.sql.schema import ForeignKey
 
 from app.models.base import Base
+from app.models.user import User
 
 
 class Profile(Base):
     __tablename__ = 'profiles'
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('users.id'))
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), unique=True)
+    user: Mapped["User"] = relationship(back_populates="profile")
     business_type: Mapped[str]
     trust_score: Mapped[float]
     credit_score: Mapped[float]
