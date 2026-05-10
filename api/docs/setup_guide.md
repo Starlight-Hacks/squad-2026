@@ -7,8 +7,8 @@ This markdown file outlines the basics steps you take to have the API up and run
 Begin by cloning this git repository. Note that the following commands assume you are on a Unix based system.
 
 ```bash
-git clone https://github.com/Starlight-Hacks/squad-2026.git &&\
-cd squad-2026/api
+git clone https://github.com/Starlight-Hacks/squad-2026.git\
+    && cd squad-2026/api
 ```
 
 ## Docker and Docker Compose
@@ -25,13 +25,21 @@ cp .env.sample .env
 
 You may modify this file to use your own variables/secrets.
 
+## Database Migrations
+
+This project uses Alembic and SqlAlchemy, use this command to execute migrations, it is assumed that the API service is running via Docker.
+
+```bash
+docker compose exec api alembic upgrade head
+```
+
 ## Containerized Development
 
 Once you've [setup Docker](#docker-and-docker-compose), spin up the web server and API with the following command.
 
 ```bash
-docker compose down -v &&\
-docker compose up -d
+docker compose down -v\
+    && docker compose up -d --build
 ```
 
 This will shut down any previously running containers then start the services listed under the Docker Compose yaml file in the background.

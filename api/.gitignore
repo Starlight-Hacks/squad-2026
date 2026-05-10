@@ -11,3 +11,5 @@ wheels/
 .DS_Store
 *.sqlite3
 .ropeproject/
+
+.ash_history
