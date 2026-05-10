@@ -1,3 +1,4 @@
+from pydantic.fields import computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,3 +15,14 @@ class Settings(BaseSettings):
     db_pool_recycle: int = 1800
 
     model_config = SettingsConfigDict(env_file='.env')
+
+    @computed_field
+    @property
+    def database_url(self) -> str:
+        return (
+            f'postgresql+psycopg://{self.database_user}:{self.database_password}'
+            f'@{self.database_host}:{self.database_port}/{self.database_name}'
+        )
+
+
+settings = Settings()  # pyright: ignore[reportCallIssue]

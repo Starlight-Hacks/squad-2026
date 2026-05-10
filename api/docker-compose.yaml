@@ -1,5 +1,7 @@
 services:
   api:
+    depends_on:
+      - database
     container_name: api
     build: .
     command: uvicorn app.main:app --host 0.0.0.0 --reload
