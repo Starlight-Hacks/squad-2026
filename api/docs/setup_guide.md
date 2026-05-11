@@ -11,9 +11,17 @@ git clone https://github.com/Starlight-Hacks/squad-2026.git\
     && cd squad-2026/api
 ```
 
+### API Setup
+
+ To setup the Python Environment, run
+
+ ```bash
+    python -m pip -r requirements.txt
+```
+
 ## Docker and Docker Compose
 
-This project uses Docker and Docker Compose. It is assumed that Docker is already configured on your system. See [here](https://docs.docker.com/engine/install/) for more information on setting up Docker for Linux/Mac or Windows.
+This project uses Docker and Docker Compose. It is assumed that Docker is already configured on your system. Click [this link](https://docs.docker.com/engine/install/) for more information on setting up Docker for Linux/Mac or Windows.
 
 ## Environment Variables
 

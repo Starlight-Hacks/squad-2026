@@ -1,4 +1,4 @@
-## Index
+# Index
 
 See specific setup guides for each service / API / application below:
 
