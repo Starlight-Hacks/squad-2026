@@ -18,7 +18,7 @@ class User(Base):
     __tablename__ = 'users'
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    profile: Mapped['Profile'] = relationship(back_populates='user', uselist=False)
+    profile: Mapped['Profile'] = relationship(back_populates='user', uselist=False)  # pyright: ignore[reportInvalidTypeForm]
     phone_number: Mapped[str] = mapped_column(unique=True)
     first_name: Mapped[str]
     last_name: Mapped[str]
