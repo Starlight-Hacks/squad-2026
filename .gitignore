@@ -3,3 +3,5 @@
 .env.prod
 .env.dev
 .venv
+.claude/
+.claire/
