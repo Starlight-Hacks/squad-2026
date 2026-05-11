@@ -19,7 +19,7 @@ def send_otp_sms(self, phone_number: str, otp: str) -> None:
     In demo mode the OTP is logged and no network call is made.
     """
     if settings.twilio_demo_mode:
-        logger.warning('DEMO MODE :::: OTP for %s: %s', phone_number, otp)
+        logger.warning('[DEMO MODE] OTP for %s: %s', phone_number, otp)
         return
 
     url = f'https://api.twilio.com/2010-04-01/Accounts/{settings.twilio_account_sid}/Messages.json'
