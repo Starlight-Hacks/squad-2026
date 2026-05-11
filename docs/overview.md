@@ -1,4 +1,4 @@
-## 1. Overview
+## Overview
 
 The goal of this idea is to meet three targets:
 
@@ -8,9 +8,9 @@ The goal of this idea is to meet three targets:
 
 3. A state-wide dashboard where institutions like the Internal Revenue Service can view trader activity, cashflow, search frequencies, heat maps, timeseries data and more.
 
-## 2. Distributed Payments
+## Distributed Payments
 
-### 2.1 Plan
+### Plan
 
 We intend to use WhatsApp as our primary communication interface. A registered and authorized user may initiate payments via the automated WhatsApp messenger bot. 
 
@@ -20,7 +20,7 @@ Once valid, the backend runs its own internal fraud prevention protocols which m
 
 Finally, the user is presented with details of the transaction and any further instructions.
 
-### 2.2 Flow
+### Flow
 
 1. A user registers with their mobile phone number, full name, BVN, geo-location, and any further necessary information.
 
@@ -28,10 +28,10 @@ Finally, the user is presented with details of the transaction and any further i
 
 3. A One Time Passcode (OTP) is sent to the user as phone number proof of ownership.
 
-## 3. Service Discovery
+## Service Discovery
 
 one.
 
-## 4. State-wide Trader Activity Visuals
+## State-wide Trader Activity Visuals
 
 two.
