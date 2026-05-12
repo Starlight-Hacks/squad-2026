@@ -1,5 +1,6 @@
 import hashlib
 import logging
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -8,7 +9,7 @@ from app.config import settings
 from app.database import load_database
 from app.models.payment_confirmation_token import PaymentConfirmationToken
 from app.models.user import User
-from app.models.virtual_account import VirtualAccount
+from app.models.wallet import Wallet
 from app.schemas.auth import (
     RegisterRequest,
     RegisterResponse,
@@ -16,7 +17,7 @@ from app.schemas.auth import (
     SetPCTResponse,
     VerifyOTPRequest,
     VerifyOTPResponse,
-    VirtualAccountDetails,
+    WalletDetails,
 )
 from app.services import otp as otp_service
 from app.services import pct as pct_service
@@ -41,6 +42,7 @@ def register(payload: RegisterRequest, db: Session = Depends(load_database)):
     bvn_hash = hashlib.sha256(payload.bvn.encode()).hexdigest()
 
     if existing:
+        # Unverified re-registration — refresh details and resend OTP
         user = existing
         user.first_name = payload.first_name
         user.last_name = payload.last_name
@@ -77,18 +79,18 @@ def register(payload: RegisterRequest, db: Session = Depends(load_database)):
     code = otp_service.generate_otp()
     otp_service.store_otp(payload.phone_number, code)
 
-    # basedpyright lsp issues, we can ignore them.
-    send_otp_whatsapp.delay(payload.phone_number, code)  # pyright: ignore[reportFunctionMemberAccess]
+    # Fire-and-forget: Celery worker handles delivery; response returns immediately
+    send_otp_whatsapp.delay(payload.phone_number, code)
 
     return RegisterResponse(
-        message='OTP sent to your phone number. Please verify within 10 minutes.',
+        message='OTP sent to your WhatsApp. Please verify within 10 minutes.',
         phone_number=payload.phone_number,
     )
 
 
 @router.post('/verify-otp', response_model=VerifyOTPResponse)
 async def verify_otp(payload: VerifyOTPRequest, db: Session = Depends(load_database)):
-    """Step 2: Verify OTP, validate bank account, create Squad virtual account."""
+    """Step 2: Verify OTP, validate bank account identity, create internal wallet."""
 
     user: User | None = db.query(User).filter(User.phone_number == payload.phone_number).first()
     if not user:
@@ -106,12 +108,14 @@ async def verify_otp(payload: VerifyOTPRequest, db: Session = Depends(load_datab
             detail='Invalid or expired OTP.',
         )
 
+    # Confirm the re-supplied BVN matches what was registered
     if hashlib.sha256(payload.bvn.encode()).hexdigest() != user.bvn_hash:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail='Supplied BVN does not match the registered BVN.',
         )
 
+    # Use Squad to verify the bank account name matches the registered name
     try:
         bank_info = await squad_service.lookup_bank_account(user.account_number, user.bank_code)
     except ValueError as exc:
@@ -133,44 +137,19 @@ async def verify_otp(payload: VerifyOTPRequest, db: Session = Depends(load_datab
             ),
         )
 
+    # Create the user's internal wallet (zero balance, managed by us)
+    wallet = Wallet(user_id=user.id, balance=Decimal('0.00'), currency='NGN')
+    db.add(wallet)
     user.bvn_verified = True
-
-    try:
-        va_info = await squad_service.create_virtual_account(
-            first_name=user.first_name,
-            last_name=user.last_name,
-            mobile_num=user.phone_number,
-            email=user.email,
-            bvn=payload.bvn,
-            date_of_birth=user.date_of_birth,
-            address=user.address,
-            gender=user.gender,
-            customer_identifier=str(user.id),
-        )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f'Virtual account creation failed: {exc}',
-        ) from exc
-
-    db.add(
-        VirtualAccount(
-            user_id=user.id,
-            virtual_account_number=va_info['virtual_account_number'],
-            bank_name=va_info['bank_name'],
-            account_name=va_info['account_name'],
-            squad_customer_id=va_info['customer_id'],
-        )
-    )
     user.phone_verified = True
     db.commit()
+    db.refresh(wallet)
 
     return VerifyOTPResponse(
-        message='Phone verified and virtual account created. Please set your Payment Confirmation Token.',
-        virtual_account=VirtualAccountDetails(
-            virtual_account_number=va_info['virtual_account_number'],
-            bank_name=va_info['bank_name'],
-            account_name=va_info['account_name'],
+        message='Verified. Your wallet is ready. Please set your Payment Confirmation Token.',
+        wallet=WalletDetails(
+            balance=str(wallet.balance),
+            currency=wallet.currency,
         ),
         twilio_join_code=settings.twilio_join_code,
         twilio_whatsapp_number=settings.twilio_whatsapp_number,
@@ -180,6 +159,8 @@ async def verify_otp(payload: VerifyOTPRequest, db: Session = Depends(load_datab
 
 @router.post('/set-pct', response_model=SetPCTResponse)
 def set_pct(payload: SetPCTRequest, db: Session = Depends(load_database)):
+    """Step 3: Set or update the Payment Confirmation Token."""
+
     user: User | None = db.query(User).filter(User.phone_number == payload.phone_number).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='User not found.')
@@ -193,7 +174,11 @@ def set_pct(payload: SetPCTRequest, db: Session = Depends(load_database)):
     salt = pct_service.generate_salt()
     token_hash = pct_service.hash_pct(payload.pct, salt)
 
-    existing_pct = db.query(PaymentConfirmationToken).filter(PaymentConfirmationToken.user_id == user.id).first()
+    existing_pct = (
+        db.query(PaymentConfirmationToken)
+        .filter(PaymentConfirmationToken.user_id == user.id)
+        .first()
+    )
     if existing_pct:
         existing_pct.token_hash = token_hash
         existing_pct.token_salt = salt

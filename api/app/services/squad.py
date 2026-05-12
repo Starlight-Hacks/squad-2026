@@ -1,3 +1,12 @@
+"""
+Squad Co API integration.
+
+Squad is used solely as a payment rail, we manage user wallets and balances
+internally. Squad handles:
+  - Bank account name lookup   (used during registration to verify identity)
+  - Outbound transfers         (used when a user sends money via WhatsApp)
+"""
+
 from typing import TypedDict
 
 import httpx
@@ -11,11 +20,9 @@ class BankAccountInfo(TypedDict):
     bank_code: str
 
 
-class VirtualAccountInfo(TypedDict):
-    virtual_account_number: str
-    bank_name: str
-    account_name: str
-    customer_id: str
+class TransferResult(TypedDict):
+    reference: str
+    status: str   # 'success' | 'pending' | 'failed'
 
 
 def _headers() -> dict[str, str]:
@@ -26,68 +33,68 @@ def _headers() -> dict[str, str]:
 
 
 async def lookup_bank_account(account_number: str, bank_code: str) -> BankAccountInfo:
-    """Look up the account name for a given NUBAN account number and bank code."""
+    """Resolve the account name for a NUBAN account number and bank code.
+
+    Used during registration (identity check) and before every payment
+    (show recipient details to the user before they confirm).
+    """
     url = f'{settings.squad_base_url}/payout/account/lookup'
-    params = {'account_number': account_number, 'bank_code': bank_code}
 
     async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.get(url, headers=_headers(), params=params)
+        response = await client.get(
+            url,
+            headers=_headers(),
+            params={'account_number': account_number, 'bank_code': bank_code},
+        )
 
     if response.status_code != 200:
         raise ValueError(f'Bank account lookup failed: {response.text}')
 
     data = response.json()
-
     if not data.get('success'):
         raise ValueError(f'Bank account lookup unsuccessful: {data.get("message")}')
 
-    account_data = data['data']
     return BankAccountInfo(
-        account_name=account_data['account_name'],
+        account_name=data['data']['account_name'],
         account_number=account_number,
         bank_code=bank_code,
     )
 
 
-async def create_virtual_account(
-    first_name: str,
-    last_name: str,
-    mobile_num: str,
-    email: str,
-    bvn: str,
-    date_of_birth: str,
-    address: str,
-    gender: str,
-    customer_identifier: str,
-) -> VirtualAccountInfo:
-    """Create a Squad virtual account for a verified user."""
-    url = f'{settings.squad_base_url}/virtual-account'
+async def transfer(
+    amount_kobo: int,
+    recipient_account_number: str,
+    recipient_bank_code: str,
+    reference: str,
+    narration: str = 'Squad payment',
+) -> TransferResult:
+    """Initiate an outbound bank transfer via Squad's payout API.
+
+    amount_kobo: amount in the smallest currency unit (kobo for NGN).
+    reference: unique per-transaction ID from our system.
+    """
+    url = f'{settings.squad_base_url}/payout/transfer'
     payload = {
-        'first_name': first_name,
-        'last_name': last_name,
-        'mobile_num': mobile_num,
-        'email': email,
-        'bvn': bvn,
-        'dob': date_of_birth,
-        'address': address,
-        'gender': gender,
-        'customer_identifier': customer_identifier,
+        'transaction_reference': reference,
+        'amount': amount_kobo,
+        'bank_code': recipient_bank_code,
+        'account_number': recipient_account_number,
+        'account_name': '',   # populated by the caller after lookup
+        'narration': narration,
+        'currency_id': 'NGN',
     }
 
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(url, headers=_headers(), json=payload)
 
     if response.status_code not in (200, 201):
-        raise ValueError(f'Virtual account creation failed: {response.text}')
+        raise ValueError(f'Transfer failed: {response.text}')
 
     data = response.json()
     if not data.get('success'):
-        raise ValueError(f'Virtual account creation unsuccessful: {data.get("message")}')
+        raise ValueError(f'Transfer unsuccessful: {data.get("message")}')
 
-    account_data = data['data']
-    return VirtualAccountInfo(
-        virtual_account_number=account_data['virtual_account_number'],
-        bank_name=account_data.get('bank_name', 'GTBank'),
-        account_name=f'{first_name} {last_name}',
-        customer_id=account_data.get('customer_id', customer_identifier),
+    return TransferResult(
+        reference=reference,
+        status=data['data'].get('status', 'pending'),
     )

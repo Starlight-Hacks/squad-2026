@@ -4,16 +4,16 @@ from pydantic import BaseModel, field_validator
 
 
 class RegisterRequest(BaseModel):
-    phone_number: str  # E.164 format
+    phone_number: str
     first_name: str
     last_name: str
     email: str
-    bvn: str  # 11-digit BVN
-    date_of_birth: str  # DD/MM/YYYY
+    bvn: str
+    date_of_birth: str
     address: str
-    gender: str  # '1' = Male, '2' = Female
-    account_number: str  # 10-digit NUBAN
-    bank_code: str  # 3-digit bank code
+    gender: str
+    account_number: str
+    bank_code: str
     geo_lat: float
     geo_lng: float
 
@@ -61,9 +61,7 @@ class RegisterResponse(BaseModel):
 class VerifyOTPRequest(BaseModel):
     phone_number: str
     otp: str
-    # Required again since BVN is not stored in plaintext;
-    # Squad needs it for virtual account creation
-    bvn: str
+    bvn: str  # Re-supplied because BVN is not stored in plaintext; used here only for identity cross-check
 
     @field_validator('otp')
     @classmethod
@@ -80,15 +78,14 @@ class VerifyOTPRequest(BaseModel):
         return v
 
 
-class VirtualAccountDetails(BaseModel):
-    virtual_account_number: str
-    bank_name: str
-    account_name: str
+class WalletDetails(BaseModel):
+    balance: str  # Decimal serialised as string to avoid float precision issues
+    currency: str
 
 
 class VerifyOTPResponse(BaseModel):
     message: str
-    virtual_account: VirtualAccountDetails
+    wallet: WalletDetails
     twilio_join_code: str
     twilio_whatsapp_number: str
     next_step: str

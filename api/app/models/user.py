@@ -9,11 +9,11 @@ from sqlalchemy.orm.attributes import Mapped
 from sqlalchemy.sql.functions import func
 
 from app.models.base import Base
+from app.models.wallet import Wallet
 
 if TYPE_CHECKING:
     from app.models.payment_confirmation_token import PaymentConfirmationToken
     from app.models.profile import Profile
-    from app.models.virtual_account import VirtualAccount
 
 
 class User(Base):
@@ -21,7 +21,7 @@ class User(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     profile: Mapped[Optional['Profile']] = relationship(back_populates='user', uselist=False)
-    virtual_account: Mapped[Optional['VirtualAccount']] = relationship(back_populates='user', uselist=False)
+    wallet: Mapped[Optional['Wallet']] = relationship(back_populates='user', uselist=False)
     payment_confirmation_token: Mapped[Optional['PaymentConfirmationToken']] = relationship(
         back_populates='user', uselist=False
     )
