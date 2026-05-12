@@ -1,5 +1,5 @@
 info:
-  name: Health
+  name: health
   type: http
   seq: 1
 
