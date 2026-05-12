@@ -77,7 +77,8 @@ def register(payload: RegisterRequest, db: Session = Depends(load_database)):
     code = otp_service.generate_otp()
     otp_service.store_otp(payload.phone_number, code)
 
-    send_otp_whatsapp.delay(payload.phone_number, code)
+    # basedpyright lsp issues, we can ignore them.
+    send_otp_whatsapp.delay(payload.phone_number, code)  # pyright: ignore[reportFunctionMemberAccess]
 
     return RegisterResponse(
         message='OTP sent to your phone number. Please verify within 10 minutes.',

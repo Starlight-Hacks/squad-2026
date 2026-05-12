@@ -29,19 +29,19 @@ class User(Base):
     phone_number: Mapped[str] = mapped_column(unique=True)
     first_name: Mapped[str]
     last_name: Mapped[str]
-    email: Mapped[Optional[str]]
-    date_of_birth: Mapped[Optional[str]]
-    address: Mapped[Optional[str]]
-    gender: Mapped[Optional[str]]
+    email: Mapped[str]
+    date_of_birth: Mapped[str]
+    address: Mapped[str]
+    gender: Mapped[str]
 
-    bvn_hash: Mapped[Optional[str]]
+    bvn_hash: Mapped[str]
     bvn_verified: Mapped[bool] = mapped_column(default=False)
     phone_verified: Mapped[bool] = mapped_column(default=False)
 
-    account_number: Mapped[Optional[str]]
-    bank_code: Mapped[Optional[str]]
+    account_number: Mapped[str]
+    bank_code: Mapped[str]
 
-    geo_lat: Mapped[Optional[float]]
-    geo_lng: Mapped[Optional[float]]
+    geo_lat: Mapped[float]
+    geo_lng: Mapped[float]
 
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
