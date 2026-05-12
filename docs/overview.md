@@ -14,7 +14,7 @@ The goal of this idea is to meet three targets:
 
 We intend to use WhatsApp as our primary communication interface. A registered and authorized user may initiate payments via the automated WhatsApp messenger bot.
 
-All payments must be initiated from the user's registered phone number. Before any payment may be completed, the user is presented with a summary the recipient's details then prompted for their Access Confirmation Code. 
+All payments must be initiated from the user's registered phone number. Before any payment may be completed, the user is presented with a summary the recipient's details then prompted for their Access Confirmation Code.
 
 Once valid, the backend runs its own internal fraud prevention protocols which may proceed to either reject or approve the transaction.
 
@@ -32,25 +32,25 @@ Finally, the user is presented with details of the transaction and any further i
 
 5. For the demo/mvp, they are also provided with the Twillio join code and phone number.
 
-6. Payment requests are initiated on WhatsApp. The user converses in natural language such as "send 2500 naira to 8112233445 GTBank". 
+6. Payment requests are initiated on WhatsApp. The user converses in natural language such as "send 2500 naira to 8112233445 GTBank".
 
 7. Our models parse this intent to ensure that the message makes sense. However, we use regex for account number and amount.
 
-8. Then our API runs sanity checks such as account balance checks, account number checks using Squad's API, then returns a structured response of the recipients details, prompting the user for a confirmation code. 
+8. Then our API runs sanity checks such as account balance checks, account number checks using Squad's API, then returns a structured response of the recipients details, prompting the user for a confirmation code.
 
-8. Any message which isn't a valid Payment Confirmation Code after 10 minutes automatically cancels the transaction.
+9. Any message which isn't a valid Payment Confirmation Code after 10 minutes automatically cancels the transaction.
 
-9. Once a payment has been completed or denied, the bot responds appropriately with the transaction status.
+10. Once a payment has been completed or denied, the bot responds appropriately with the transaction status.
 
 ## Service Discovery
 
-### Plan
+### Method
 
-Service discovery is the second pillar our solution addresses. We intend to make it easy for informal traders or service workers to be discovered by potential clients. 
+Service discovery is the second pillar our solution addresses. We intend to make it easy for informal traders or service workers to be discovered by potential clients.
 
 For instance, say you were looking for hair dressers near you. The application uses Artificial Intelligence to match against our user base of skilled workers who fit the description and are available to work in the area. In this way, our service connects workers and employers seamlessly.
 
-### Flow
+### Process
 
 1. On the same web application, users can register as service providers. They provide personally identifiable information such as their email address, phone number, full names, geo-location, service rate etc.
 
@@ -66,17 +66,17 @@ For instance, say you were looking for hair dressers near you. The application u
 
 ## State-wide Activity Network
 
-### Plan
+### Approach
 
-The State-wide Activity Network is a separate web application distinct from both the WhatsApp interface and the registration portal that exposes aggregated platform activity to authorised institutional consumers. The intended consumers are State Internal Revenue Services (such as the Lagos State Internal Revenue Service) etc. 
+The State-wide Activity Network is a separate web application distinct from both the WhatsApp interface and the registration portal that exposes aggregated platform activity to authorised institutional consumers. The intended consumers are State Internal Revenue Services (such as the Lagos State Internal Revenue Service) etc.
 
 Each institution sees the data through views relevant to its mandate: a tax authority sees cashflow by Local Government Area, a commerce ministry sees sector concentration, a labour ministry sees supply and demand for skilled work, and the central bank sees inclusion metrics.
 
-The network is strictly aggregative. Individual trader transactions, identities, and locations are never exposed to institutional consumers. Every visualisation enforces a minimum cohort size of five distinct contributing users before any figure is rendered; below that threshold, the cell is suppressed. 
+The network is strictly aggregative. Individual trader transactions, identities, and locations are never exposed to institutional consumers. Every visualisation enforces a minimum cohort size of five distinct contributing users before any figure is rendered; below that threshold, the cell is suppressed.
 
 This is both an ethical requirement and a precondition for institutional partnership, given the obligations imposed on government data handlers under the Nigeria Data Protection Act 2023.
 
-### Flow
+### Procedure
 
 1. Every event on the platform including user registrations, completed transactions, discovery queries, provider contacts, and ratings, is logged with a structured schema including Local Government Area, sector category (where applicable), timestamp, and a hashed user identifier that cannot be reversed to a phone number or BVN.
 
