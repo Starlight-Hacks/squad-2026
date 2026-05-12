@@ -32,7 +32,8 @@ def store_otp(phone_number: str, code: str) -> None:
 
 
 def verify_and_consume(phone_number: str, code: str) -> bool:
-    """Return True and delete the key if the code matches; False otherwise.
+    """
+    Return True and delete the key if the code matches; False otherwise.
 
     Uses a pipeline so the get + delete is atomic from the caller's perspective.
     """

@@ -1,11 +1,3 @@
-"""
-Squad Co API integration.
-
-Covers:
-  - Bank account name lookup (verify account_number + bank_code)
-  - Virtual account creation
-"""
-
 from typing import TypedDict
 
 import httpx
