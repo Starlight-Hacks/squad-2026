@@ -24,7 +24,6 @@ class Settings(BaseSettings):
     twilio_from_number: str
     twilio_whatsapp_number: str
     twilio_join_code: str
-    # When True, OTPs are logged instead of sent.
     twilio_demo_mode: bool
 
     model_config = SettingsConfigDict(env_file='.env')
