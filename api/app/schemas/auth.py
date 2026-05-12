@@ -1,0 +1,110 @@
+import re
+
+from pydantic import BaseModel, field_validator
+
+
+class RegisterRequest(BaseModel):
+    phone_number: str  # E.164 format
+    first_name: str
+    last_name: str
+    email: str
+    bvn: str  # 11-digit BVN
+    date_of_birth: str  # DD/MM/YYYY
+    address: str
+    gender: str  # '1' = Male, '2' = Female
+    account_number: str  # 10-digit NUBAN
+    bank_code: str  # 3-digit bank code
+    geo_lat: float
+    geo_lng: float
+
+    @field_validator('phone_number')
+    @classmethod
+    def validate_phone(cls, v: str) -> str:
+        if not re.match(r'^\+234\d{10}$', v):
+            raise ValueError('phone_number must be in E.164 format: +234XXXXXXXXXX')
+        return v
+
+    @field_validator('bvn')
+    @classmethod
+    def validate_bvn(cls, v: str) -> str:
+        if not re.match(r'^\d{11}$', v):
+            raise ValueError('bvn must be exactly 11 digits')
+        return v
+
+    @field_validator('account_number')
+    @classmethod
+    def validate_account_number(cls, v: str) -> str:
+        if not re.match(r'^\d{10}$', v):
+            raise ValueError('account_number must be exactly 10 digits')
+        return v
+
+    @field_validator('gender')
+    @classmethod
+    def validate_gender(cls, v: str) -> str:
+        if v not in ('1', '2'):
+            raise ValueError("gender must be '1' (Male) or '2' (Female)")
+        return v
+
+    @field_validator('date_of_birth')
+    @classmethod
+    def validate_dob(cls, v: str) -> str:
+        if not re.match(r'^\d{2}/\d{2}/\d{4}$', v):
+            raise ValueError('date_of_birth must be in DD/MM/YYYY format')
+        return v
+
+
+class RegisterResponse(BaseModel):
+    message: str
+    phone_number: str
+
+
+class VerifyOTPRequest(BaseModel):
+    phone_number: str
+    otp: str
+    # Required again since BVN is not stored in plaintext;
+    # Squad needs it for virtual account creation
+    bvn: str
+
+    @field_validator('otp')
+    @classmethod
+    def validate_otp(cls, v: str) -> str:
+        if not re.match(r'^\d{6}$', v):
+            raise ValueError('otp must be exactly 6 digits')
+        return v
+
+    @field_validator('bvn')
+    @classmethod
+    def validate_bvn(cls, v: str) -> str:
+        if not re.match(r'^\d{11}$', v):
+            raise ValueError('bvn must be exactly 11 digits')
+        return v
+
+
+class VirtualAccountDetails(BaseModel):
+    virtual_account_number: str
+    bank_name: str
+    account_name: str
+
+
+class VerifyOTPResponse(BaseModel):
+    message: str
+    virtual_account: VirtualAccountDetails
+    twilio_join_code: str
+    twilio_whatsapp_number: str
+    next_step: str
+
+
+class SetPCTRequest(BaseModel):
+    phone_number: str
+    pct: str  # 4–8 character alphanumeric PIN
+
+    @field_validator('pct')
+    @classmethod
+    def validate_pct(cls, v: str) -> str:
+        if not re.match(r'^[A-Za-z0-9]{4,8}$', v):
+            raise ValueError('pct must be 4–8 alphanumeric characters')
+        return v
+
+
+class SetPCTResponse(BaseModel):
+    message: str
