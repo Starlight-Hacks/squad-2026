@@ -1,48 +1,41 @@
-"""
-Consuming the OTP (verify_and_consume) atomically deletes the key so the
-same code cannot be replayed.
-"""
+import logging
 
-import hashlib
-import random
-import string
-
-import redis
+from twilio.base.exceptions import TwilioRestException
+from twilio.rest import Client
 
 from app.config import settings
 
-OTP_EXPIRY_SECONDS = 600
+logger = logging.getLogger(__name__)
+
+CHANNEL = 'whatsapp'
 
 
-def _redis() -> redis.Redis:
-    return redis.from_url(settings.redis_url, decode_responses=True)
+def _client() -> Client:
+    return Client(settings.twilio_account_sid, settings.twilio_auth_token)
 
 
-def generate_otp() -> str:
-    return ''.join(random.choices(string.digits, k=6))
+def send_otp(phone_number: str) -> None:
+    """Start a Twilio Verify verification — Twilio generates and delivers the OTP."""
+    if settings.twilio_demo_mode:
+        logger.warning('(DEMO MODE) Skipping Twilio Verify send for %s', phone_number)
+        return
+
+    _client().verify.v2.services(settings.twilio_verify_service_sid).verifications.create(
+        to=phone_number,
+        channel=CHANNEL,
+    )
 
 
-def _hash(code: str) -> str:
-    return hashlib.sha256(code.encode()).hexdigest()
+def verify_otp(phone_number: str, code: str) -> bool:
+    """Check a code against Twilio Verify. Returns True if approved."""
+    if settings.twilio_demo_mode:
+        return code == '000000'
 
-
-def store_otp(phone_number: str, code: str) -> None:
-    """Hash and store the OTP in Redis with a TTL."""
-    _redis().setex(f'otp:{phone_number}', OTP_EXPIRY_SECONDS, _hash(code))
-
-
-def verify_and_consume(phone_number: str, code: str) -> bool:
-    """
-    Return True and delete the key if the code matches; False otherwise.
-
-    Uses a pipeline so the get + delete is atomic from the caller's perspective.
-    """
-    r = _redis()
-    key = f'otp:{phone_number}'
-    stored = r.get(key)
-    if stored is None:
+    try:
+        check = _client().verify.v2.services(settings.twilio_verify_service_sid).verification_checks.create(
+            to=phone_number,
+            code=code,
+        )
+        return check.status == 'approved'
+    except TwilioRestException:
         return False
-    if _hash(code) != stored:
-        return False
-    r.delete(key)
-    return True

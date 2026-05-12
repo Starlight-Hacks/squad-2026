@@ -6,7 +6,6 @@ celery_app = Celery(
     'squad',
     broker=settings.redis_url,
     backend=settings.redis_url,
-    include=['app.tasks.sms'],
 )
 
 celery_app.conf.update(

@@ -22,7 +22,6 @@ from app.schemas.auth import (
 from app.services import otp as otp_service
 from app.services import pct as pct_service
 from app.services import squad as squad_service
-from app.tasks.whatsapp import send_otp_whatsapp
 
 router = APIRouter(prefix='/auth', tags=['auth'])
 logger = logging.getLogger(__name__)
@@ -76,11 +75,7 @@ def register(payload: RegisterRequest, db: Session = Depends(load_database)):
 
     db.commit()
 
-    code = otp_service.generate_otp()
-    otp_service.store_otp(payload.phone_number, code)
-
-    # Fire-and-forget: Celery worker handles delivery; response returns immediately
-    send_otp_whatsapp.delay(payload.phone_number, code)
+    otp_service.send_otp(payload.phone_number)
 
     return RegisterResponse(
         message='OTP sent to your WhatsApp. Please verify within 10 minutes.',
@@ -102,7 +97,7 @@ async def verify_otp(payload: VerifyOTPRequest, db: Session = Depends(load_datab
             detail='Phone number is already verified.',
         )
 
-    if not otp_service.verify_and_consume(payload.phone_number, payload.otp):
+    if not otp_service.verify_otp(payload.phone_number, payload.otp):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail='Invalid or expired OTP.',
@@ -174,11 +169,7 @@ def set_pct(payload: SetPCTRequest, db: Session = Depends(load_database)):
     salt = pct_service.generate_salt()
     token_hash = pct_service.hash_pct(payload.pct, salt)
 
-    existing_pct = (
-        db.query(PaymentConfirmationToken)
-        .filter(PaymentConfirmationToken.user_id == user.id)
-        .first()
-    )
+    existing_pct = db.query(PaymentConfirmationToken).filter(PaymentConfirmationToken.user_id == user.id).first()
     if existing_pct:
         existing_pct.token_hash = token_hash
         existing_pct.token_salt = salt
