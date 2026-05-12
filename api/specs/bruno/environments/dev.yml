@@ -24,3 +24,5 @@ variables:
     name: geo_lat
   - secret: true
     name: geo_lng
+  - secret: true
+    name: otp

@@ -13,6 +13,8 @@ from app.models.wallet import Wallet
 from app.schemas.auth import (
     RegisterRequest,
     RegisterResponse,
+    ResendOTPRequest,
+    ResendOTPResponse,
     SetPCTRequest,
     SetPCTResponse,
     VerifyOTPRequest,
@@ -29,7 +31,6 @@ logger = logging.getLogger(__name__)
 
 @router.post('/register', response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
 def register(payload: RegisterRequest, db: Session = Depends(load_database)):
-    """Step 1: Register a new user and dispatch an OTP via Celery."""
 
     existing = db.query(User).filter(User.phone_number == payload.phone_number).first()
     if existing and existing.phone_verified:
@@ -83,9 +84,28 @@ def register(payload: RegisterRequest, db: Session = Depends(load_database)):
     )
 
 
+@router.post('/resend-otp', response_model=ResendOTPResponse)
+async def resend_otp(payload: ResendOTPRequest, db: Session = Depends(load_database)):
+
+    user: User | None = db.query(User).filter(User.phone_number == payload.phone_number).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='User not found.')
+
+    if user.phone_verified:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail='Phone number is already verified.',
+        )
+
+    otp_service.send_otp(payload.phone_number)
+
+    return ResendOTPResponse(
+        message='Successfully resent OTP'
+    )
+
+
 @router.post('/verify-otp', response_model=VerifyOTPResponse)
 async def verify_otp(payload: VerifyOTPRequest, db: Session = Depends(load_database)):
-    """Step 2: Verify OTP, validate bank account identity, create internal wallet."""
 
     user: User | None = db.query(User).filter(User.phone_number == payload.phone_number).first()
     if not user:
@@ -154,7 +174,6 @@ async def verify_otp(payload: VerifyOTPRequest, db: Session = Depends(load_datab
 
 @router.post('/set-pct', response_model=SetPCTResponse)
 def set_pct(payload: SetPCTRequest, db: Session = Depends(load_database)):
-    """Step 3: Set or update the Payment Confirmation Token."""
 
     user: User | None = db.query(User).filter(User.phone_number == payload.phone_number).first()
     if not user:

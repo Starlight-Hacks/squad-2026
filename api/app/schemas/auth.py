@@ -58,6 +58,14 @@ class RegisterResponse(BaseModel):
     phone_number: str
 
 
+class ResendOTPRequest(BaseModel):
+    phone_number: str
+
+
+class ResendOTPResponse(BaseModel):
+    message: str
+
+
 class VerifyOTPRequest(BaseModel):
     phone_number: str
     otp: str

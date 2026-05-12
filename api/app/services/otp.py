@@ -25,6 +25,8 @@ def send_otp(phone_number: str) -> None:
         channel=CHANNEL,
     )
 
+    logger.info('OTP has been sent')
+
 
 def verify_otp(phone_number: str, code: str) -> bool:
     """Check a code against Twilio Verify. Returns True if approved."""
@@ -32,9 +34,13 @@ def verify_otp(phone_number: str, code: str) -> bool:
         return code == '000000'
 
     try:
-        check = _client().verify.v2.services(settings.twilio_verify_service_sid).verification_checks.create(
-            to=phone_number,
-            code=code,
+        check = (
+            _client()
+            .verify.v2.services(settings.twilio_verify_service_sid)
+            .verification_checks.create(
+                to=phone_number,
+                code=code,
+            )
         )
         return check.status == 'approved'
     except TwilioRestException:
