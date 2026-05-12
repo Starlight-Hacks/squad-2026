@@ -14,6 +14,19 @@ class Settings(BaseSettings):
     db_pool_timeout: int = 30
     db_pool_recycle: int = 1800
 
+    redis_url: str = 'redis://redis:6379/0'
+
+    squad_secret_key: str
+    squad_base_url: str
+
+    twilio_account_sid: str
+    twilio_auth_token: str
+    twilio_from_number: str
+    twilio_whatsapp_number: str
+    twilio_join_code: str
+    # When True, OTPs are logged instead of sent.
+    twilio_demo_mode: bool
+
     model_config = SettingsConfigDict(env_file='.env')
 
     @computed_field

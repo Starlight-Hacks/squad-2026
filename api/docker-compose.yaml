@@ -13,6 +13,27 @@ services:
       - .env
     restart: on-failure
 
+  worker:
+    depends_on:
+      - redis
+    container_name: celery_worker
+    build: .
+    command: celery -A app.worker.celery_app worker --loglevel=info
+    volumes:
+      - .:/code
+    env_file:
+      - .env
+    restart: on-failure
+
+  redis:
+    container_name: redis
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: always
+
   database:
     container_name: postgres
     image: postgres:18
@@ -28,3 +49,4 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
