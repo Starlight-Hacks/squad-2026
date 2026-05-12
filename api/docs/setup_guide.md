@@ -16,7 +16,8 @@ cd squad-2026/api
  To setup the Python Environment, run
 
  ```bash
-    python -m pip -r requirements.txt
+    cd squad-2026/api
+    python -m pip install -r requirements.txt
 ```
 
 ## Docker and Docker Compose

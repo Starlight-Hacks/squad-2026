@@ -1,4 +1,4 @@
-## Overview
+# Overview
 
 The goal of this idea is to meet three targets:
 
@@ -12,11 +12,11 @@ The goal of this idea is to meet three targets:
 
 ### Plan
 
-We intend to use WhatsApp as our primary communication interface. A registered and authorized user may initiate payments via the automated WhatsApp messenger bot. 
+We intend to use WhatsApp as our primary communication interface. A registered and authorized user may initiate payments via the automated WhatsApp messenger bot.
 
-All payments must be initiated from the user's registered phone number. Before any payment may be completed, the user is presented with a summary the recipient's details then prompted for their Access Confirmation Code. 
+All payments must be initiated from the user's registered phone number. Before any payment may be completed, the user is presented with a summary the recipient's details then prompted for their Access Confirmation Code.
 
-Once valid, the backend runs its own internal fraud prevention protocols which may proceed to either reject or approve the transaction. 
+Once valid, the backend runs its own internal fraud prevention protocols which may proceed to either reject or approve the transaction.
 
 Finally, the user is presented with details of the transaction and any further instructions.
 
