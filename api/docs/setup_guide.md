@@ -51,11 +51,17 @@ alembic upgrade head
 Once you've [setup Docker](#docker-and-docker-compose), spin up the web server and API with the following command.
 
 ```bash
-docker compose down -v
+docker compose down
 docker compose up -d --build
 ```
 
 This will shut down any previously running containers then start the services listed under the Docker Compose yaml file in the background.
+
+Using `--build` will run build steps each time. To constrain this to only the api container, omit the build flat, then use:
+
+```bash
+docker compose up api -d --build
+```
 
 To inspect logs for any such service, use:
 
