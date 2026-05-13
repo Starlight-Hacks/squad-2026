@@ -1,4 +1,3 @@
-import hashlib
 import logging
 from decimal import Decimal
 
@@ -39,8 +38,6 @@ def register(payload: RegisterRequest, db: Session = Depends(load_database)):
             detail='A verified account already exists for this phone number.',
         )
 
-    bvn_hash = hashlib.sha256(payload.bvn.encode()).hexdigest()
-
     if existing:
         # Unverified re-registration — refresh details and resend OTP
         user = existing
@@ -50,7 +47,6 @@ def register(payload: RegisterRequest, db: Session = Depends(load_database)):
         user.date_of_birth = payload.date_of_birth
         user.address = payload.address
         user.gender = payload.gender
-        user.bvn_hash = bvn_hash
         user.account_number = payload.account_number
         user.bank_code = payload.bank_code
         user.geo_lat = payload.geo_lat
@@ -64,8 +60,7 @@ def register(payload: RegisterRequest, db: Session = Depends(load_database)):
             date_of_birth=payload.date_of_birth,
             address=payload.address,
             gender=payload.gender,
-            bvn_hash=bvn_hash,
-            bvn_verified=False,
+            account_verified=False,
             phone_verified=False,
             account_number=payload.account_number,
             bank_code=payload.bank_code,
@@ -123,13 +118,6 @@ async def verify_otp(payload: VerifyOTPRequest, db: Session = Depends(load_datab
             detail='Invalid or expired OTP.',
         )
 
-    # Confirm the re-supplied BVN matches what was registered
-    if hashlib.sha256(payload.bvn.encode()).hexdigest() != user.bvn_hash:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail='Supplied BVN does not match the registered BVN.',
-        )
-
     # Use Squad to verify the bank account name matches the registered name
     try:
         bank_info = await squad_service.lookup_bank_account(user.account_number, user.bank_code)
@@ -155,7 +143,7 @@ async def verify_otp(payload: VerifyOTPRequest, db: Session = Depends(load_datab
     # Create the user's internal wallet (zero balance, managed by us)
     wallet = Wallet(user_id=user.id, balance=Decimal('0.00'), currency='NGN')
     db.add(wallet)
-    user.bvn_verified = True
+    user.account_verified = True
     user.phone_verified = True
     db.commit()
     db.refresh(wallet)

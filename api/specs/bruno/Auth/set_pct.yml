@@ -1,17 +1,17 @@
 info:
-  name: verify_otp
+  name: set_pct
   type: http
-  seq: 3
+  seq: 2
 
 http:
   method: POST
-  url: "{{base_url}}/auth/verify-otp"
+  url: "{{base_url}}/auth/set-pct"
   body:
     type: json
     data: |-
       {
         "phone_number": "{{phone_number}}",
-        "otp": "{{otp}}"
+        "pct": "{{pct}}"
       }
   auth: inherit
 

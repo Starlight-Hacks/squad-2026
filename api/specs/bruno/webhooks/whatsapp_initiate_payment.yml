@@ -1,18 +1,14 @@
 info:
-  name: verify_otp
+  name: whatsapp_initiate_payment
   type: http
-  seq: 3
+  seq: 1
 
 http:
   method: POST
-  url: "{{base_url}}/auth/verify-otp"
+  url: "{{base_url}}/webhooks/twilio/whatsapp"
   body:
     type: json
-    data: |-
-      {
-        "phone_number": "{{phone_number}}",
-        "otp": "{{otp}}"
-      }
+    data: ""
   auth: inherit
 
 settings:

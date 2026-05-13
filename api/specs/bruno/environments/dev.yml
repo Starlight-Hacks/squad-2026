@@ -11,8 +11,6 @@ variables:
   - secret: true
     name: email
   - secret: true
-    name: bvn
-  - secret: true
     name: dob
   - secret: true
     name: address
@@ -26,3 +24,7 @@ variables:
     name: geo_lng
   - secret: true
     name: otp
+  - secret: true
+    name: pct
+  - secret: true
+    name: recipient_account_number

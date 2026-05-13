@@ -20,6 +20,7 @@ class Wallet(Base):
     __tablename__ = 'wallets'
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('users.id'), unique=True)
     user: Mapped['User'] = relationship(back_populates='wallet')
 

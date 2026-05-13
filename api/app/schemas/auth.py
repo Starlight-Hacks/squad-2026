@@ -8,7 +8,6 @@ class RegisterRequest(BaseModel):
     first_name: str
     last_name: str
     email: str
-    bvn: str
     date_of_birth: str
     address: str
     gender: str
@@ -22,13 +21,6 @@ class RegisterRequest(BaseModel):
     def validate_phone(cls, v: str) -> str:
         if not re.match(r'^\+234\d{10}$', v):
             raise ValueError('phone_number must be in E.164 format: +234XXXXXXXXXX')
-        return v
-
-    @field_validator('bvn')
-    @classmethod
-    def validate_bvn(cls, v: str) -> str:
-        if not re.match(r'^\d{11}$', v):
-            raise ValueError('bvn must be exactly 11 digits')
         return v
 
     @field_validator('account_number')
@@ -69,20 +61,12 @@ class ResendOTPResponse(BaseModel):
 class VerifyOTPRequest(BaseModel):
     phone_number: str
     otp: str
-    bvn: str  # Re-supplied because BVN is not stored in plaintext; used here only for identity cross-check
 
     @field_validator('otp')
     @classmethod
     def validate_otp(cls, v: str) -> str:
         if not re.match(r'^\d{6}$', v):
             raise ValueError('otp must be exactly 6 digits')
-        return v
-
-    @field_validator('bvn')
-    @classmethod
-    def validate_bvn(cls, v: str) -> str:
-        if not re.match(r'^\d{11}$', v):
-            raise ValueError('bvn must be exactly 11 digits')
         return v
 
 
