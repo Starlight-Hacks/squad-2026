@@ -1,6 +1,13 @@
+import logging
+
 from fastapi import FastAPI
 
 from app.routers import auth, webhooks
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s %(levelname)-5s [%(name)s] %(message)s',
+)
 
 app = FastAPI(title='Squad Hackathon (2026) API')
 

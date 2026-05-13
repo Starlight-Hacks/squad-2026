@@ -49,7 +49,10 @@ async def whatsapp_inbound(
 
     user: User | None = db.query(User).filter(User.phone_number == phone_number).first()
     if not user:
-        return _twiml('This number is not registered with Squad. Visit our portal to sign up before sending payments.')
+        return _twiml(
+            'This number is not registered with Squad. '
+            'Visit our portal to sign up before sending payments.'
+        )
     if not user.phone_verified:
         return _twiml('Your phone number is not yet verified. Complete OTP verification first.')
 
@@ -98,9 +101,15 @@ async def _dispatch_intent(db: Session, user: User, intent: Intent, body: str) -
         return 'You have no pending transaction to cancel.'
 
     if intent.kind == IntentKind.PCT_LIKE:
-        return 'You have no pending transaction. Start one with something like: "send 2500 naira to 0123456789 GTBank".'
+        return (
+            'You have no pending transaction. Start one with something like: '
+            '"send 2500 naira to 0123456789 GTBank".'
+        )
 
-    return 'I didn\'t understand that. Try: "send 2500 naira to 0123456789 GTBank", or reply HELP for options.'
+    return (
+        "I didn't understand that. Try: "
+        '"send 2500 naira to 0123456789 GTBank", or reply HELP for options.'
+    )
 
 
 def _missing_field_reply(intent: Intent) -> str:
@@ -120,7 +129,7 @@ def _twiml(message: str) -> Response:
 def _normalise_from(raw: str) -> str:
     """Twilio sends 'whatsapp:+234XXX' — strip the channel prefix."""
     if raw.startswith('whatsapp:'):
-        return raw[len('whatsapp:') :]
+        return raw[len('whatsapp:'):]
     return raw
 
 
@@ -134,8 +143,30 @@ async def _validate_signature(request: Request) -> None:
 
     form = await request.form()
     params = {k: v for k, v in form.multi_items() if isinstance(v, str)}
-    url = str(request.url)
 
     validator = RequestValidator(settings.twilio_auth_token)
-    if not validator.validate(url, params, signature):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Invalid Twilio signature.')
+    # Twilio signs the public URL it called. When we're behind ngrok / a load
+    # balancer, str(request.url) reflects the inner http://localhost view, so
+    # we try every reasonable reconstruction before giving up.
+    for candidate in _candidate_urls(request):
+        if validator.validate(candidate, params, signature):
+            return
+
+    logger.warning('Twilio signature failed. Tried URLs: %s', list(_candidate_urls(request)))
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Invalid Twilio signature.')
+
+
+def _candidate_urls(request: Request) -> list[str]:
+    proto = request.headers.get('x-forwarded-proto', request.url.scheme)
+    host = request.headers.get('x-forwarded-host') or request.headers.get('host') or request.url.netloc
+    path_qs = request.url.path
+    if request.url.query:
+        path_qs = f'{path_qs}?{request.url.query}'
+    urls = [
+        f'{proto}://{host}{path_qs}',
+        f'https://{host}{path_qs}',
+        str(request.url),
+    ]
+    # De-dupe while preserving order.
+    seen: set[str] = set()
+    return [u for u in urls if not (u in seen or seen.add(u))]

@@ -1,14 +1,18 @@
 info:
-  name: whatsapp_initiate_payment
+  name: set_pct
   type: http
-  seq: 1
+  seq: 2
 
 http:
   method: POST
-  url: "{{base_url}}/webhooks/twilio/whatsapp"
+  url: "{{base_url}}/auth/set-pct"
   body:
     type: json
-    data: ""
+    data: |-
+      {
+        "phone_number": "{{phone_number}}",
+        "pct": "{{pct}}"
+      }
   auth: inherit
 
 settings:
