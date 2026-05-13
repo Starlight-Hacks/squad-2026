@@ -33,18 +33,13 @@ def _headers() -> dict[str, str]:
 
 
 async def lookup_bank_account(account_number: str, bank_code: str) -> BankAccountInfo:
-    """Resolve the account name for a NUBAN account number and bank code.
-
-    Used during registration (identity check) and before every payment
-    (show recipient details to the user before they confirm).
-    """
     url = f'{settings.squad_base_url}/payout/account/lookup'
 
     async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.get(
+        response = await client.post(
             url,
             headers=_headers(),
-            params={'account_number': account_number, 'bank_code': bank_code},
+            json={'account_number': account_number, 'bank_code': bank_code},
         )
 
     if response.status_code != 200:
@@ -81,7 +76,7 @@ async def transfer(
         'bank_code': recipient_bank_code,
         'account_number': recipient_account_number,
         'account_name': recipient_account_name,
-        'narration': narration,
+        # 'narration': narration,
         'currency_id': 'NGN',
     }
 

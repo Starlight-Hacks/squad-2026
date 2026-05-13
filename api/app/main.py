@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from app.routers import auth, webhooks
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s %(levelname)-5s [%(name)s] %(message)s',
 )
 

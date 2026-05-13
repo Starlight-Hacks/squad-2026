@@ -43,7 +43,7 @@ def _now() -> datetime:
 
 
 def _generate_reference() -> str:
-    return f'SQD-{secrets.token_hex(8).upper()}'
+    return f'SQD{secrets.token_hex(6).upper()}_{secrets.token_hex(4)}'
 
 
 def get_active_pending(db: Session, user: User) -> Optional[Transaction]:
