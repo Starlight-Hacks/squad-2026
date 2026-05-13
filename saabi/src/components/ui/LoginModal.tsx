@@ -71,9 +71,9 @@ export default function LoginModal({ isOpen, onClose, onSuccess }: LoginModalPro
         </button>
 
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-gt-orange/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-gt-orange/30">
-            <ShieldCheck size={32} className="text-gt-orange" />
-          </div>
+          <div className="flex items-center gap-2 cursor-pointer group">
+          <span className="font-display text-2xl font-black tracking-tighter text-gt-orange italic">SAABI</span>
+        </div>
           <h2 className="text-2xl font-black mb-2">Welcome to SAABI</h2>
           <p className="text-sm text-white/50">Login to access your personalized Dashboard</p>
         </div>
@@ -143,7 +143,7 @@ export default function LoginModal({ isOpen, onClose, onSuccess }: LoginModalPro
         </form>
 
         <p className="text-[10px] text-center text-white/40 mt-6 leading-relaxed">
-           By continuing, you agree to SAABI's Terms of Service and Privacy Policy. Secure authentication provided by Supabase.
+           By continuing, you agree to SAABI's Terms of Service and Privacy Policy.
         </p>
       </motion.div>
     </div>

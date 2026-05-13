@@ -17,7 +17,7 @@ export default function CTA({ onAction }: CTAProps) {
             JOIN THE <br className="hidden md:block" /> FINANCIAL REVOLUTION
           </h2>
           <p className="text-white/70 text-sm md:text-2xl max-w-xl mx-auto mb-10 md:mb-16 font-light">
-            Don't get left behind. Secure your gateway to the digital economy today.
+            Don't get left behind. Join SAABI Today and Secure your tomorrow.
           </p>
           <button 
             onClick={onAction}

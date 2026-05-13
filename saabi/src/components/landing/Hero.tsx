@@ -5,7 +5,7 @@ import { ArrowRight } from "lucide-react";
 import SaabiGlobe from "./SaabiGlobe";
 
 interface HeroProps {
-  onExplore: () => void;
+  onExplore: (page: "dashboard" | "investment") => void;
 }
 
 export default function Hero({ onExplore }: HeroProps) {
@@ -43,8 +43,8 @@ export default function Hero({ onExplore }: HeroProps) {
       
       <div className="relative z-10 w-full max-w-6xl">
         <div className="flex justify-center mb-8">
-            <div className="px-4 py-1 rounded-full border border-white/10 bg-white/5 text-[10px] tracking-[0.3em] font-black uppercase text-white/40">
-                Formalizing the Informal
+            <div className="px-4 py-1 rounded-lg border border-white/10 bg-white/5 text-[10px] tracking-[0.3em] font-black uppercase text-white/40">
+                 FOR SAABI PEOPLE, BY SAABI PEOPLE
             </div>
         </div>
         
@@ -58,14 +58,16 @@ export default function Hero({ onExplore }: HeroProps) {
         
         <div className="hero-btns flex flex-col sm:flex-row items-center justify-center gap-6">
           <button 
-            onClick={onExplore}
+            onClick={() => onExplore("dashboard")}
             className="group relative bg-white text-black px-10 py-5 rounded-full font-bold text-base flex items-center gap-3 transition-all hover:scale-105 active:scale-95 shadow-2xl hover:bg-gt-orange hover:text-white"
           >
-            Start Transacting
+            JOIN TODAY
             <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
           </button>
-          <button className="px-10 py-5 rounded-full border border-white/10 font-bold text-base text-white/70 hover:text-white hover:bg-white/5 transition-all">
-            Institutional Login
+          <button 
+          onClick={() => onExplore("investment")}
+          className="px-10 py-5 rounded-full border border-white/10 font-bold text-base text-white/70 hover:text-white hover:bg-white/5 transition-all">
+            INVEST NOW
           </button>
         </div>
       </div>

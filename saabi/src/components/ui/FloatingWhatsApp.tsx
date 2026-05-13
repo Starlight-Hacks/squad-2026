@@ -18,8 +18,10 @@ export default function FloatingWhatsApp() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  const whatsappURL = import.meta.env.WHATSAPP_URL || "https://wa.me/2348086609436"
+
   const openWhatsApp = () => {
-    window.open("https://wa.me/234800000SAABI", "_blank");
+    window.open(whatsappURL, "_blank");
   };
 
   return (

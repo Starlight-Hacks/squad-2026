@@ -21,7 +21,7 @@ const steps = [
     title: "Start Trading",
     desc: "Send 'Pay' or 'Find Plumber' to start doing business. It's that easy!",
     icon: Zap,
-    detail: "No Internet needed"
+    detail: "Stress Free"
   }
 ];
 
@@ -92,7 +92,7 @@ export default function OnboardingSection() {
         <div className="inline-flex items-center gap-3 px-8 py-4 rounded-3xl bg-gt-orange/5 border border-white/5 hover:border-gt-orange/20 transition-colors">
             <CheckCircle2 className="text-gt-orange" size={20} />
             <span className="text-white/40 font-bold tracking-widest text-[10px] uppercase">
-              <span className="text-white">8.4 Million</span> Traders joined this month
+              <span className="text-white">Get Started Today</span> And Join The Sabbi People
             </span>
         </div>
       </div>

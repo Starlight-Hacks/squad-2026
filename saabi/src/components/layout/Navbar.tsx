@@ -1,5 +1,5 @@
 import { cn } from "@/src/lib/utils";
-import { Wallet, LayoutDashboard, TrendingUp, Menu, X } from "lucide-react";
+import { Wallet, TrendingUp, Menu, X } from "lucide-react";
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 
