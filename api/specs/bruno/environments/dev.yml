@@ -24,3 +24,7 @@ variables:
     name: geo_lng
   - secret: true
     name: otp
+  - secret: true
+    name: pct
+  - secret: true
+    name: recipient_account_number
