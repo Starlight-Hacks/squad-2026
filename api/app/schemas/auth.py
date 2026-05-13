@@ -44,13 +44,6 @@ class RegisterRequest(BaseModel):
             raise ValueError('date_of_birth must be in DD/MM/YYYY format')
         return v
 
-    @field_validator('bank_code')
-    @classmethod
-    def validate_bank_code(cls, v: str) -> str:
-        if not re.match(r'^\d{6}$', v):
-            raise ValueError('bank_code must be exactly 6 digits')
-        return v
-
 
 class RegisterResponse(BaseModel):
     message: str
@@ -78,7 +71,7 @@ class VerifyOTPRequest(BaseModel):
 
 
 class WalletDetails(BaseModel):
-    balance: str
+    balance: str  # Decimal serialised as string to avoid float precision issues
     currency: str
 
 
@@ -92,13 +85,13 @@ class VerifyOTPResponse(BaseModel):
 
 class SetPCTRequest(BaseModel):
     phone_number: str
-    pct: str
+    pct: str  # 4–8 character alphanumeric PIN
 
     @field_validator('pct')
     @classmethod
     def validate_pct(cls, v: str) -> str:
         if not re.match(r'^[A-Za-z0-9]{4,8}$', v):
-            raise ValueError('pct must be 4-8 alphanumeric characters')
+            raise ValueError('pct must be 4–8 alphanumeric characters')
         return v
 
 

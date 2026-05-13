@@ -39,6 +39,7 @@ def register(payload: RegisterRequest, db: Session = Depends(load_database)):
         )
 
     if existing:
+        # Unverified re-registration — refresh details and resend OTP
         user = existing
         user.first_name = payload.first_name
         user.last_name = payload.last_name
@@ -93,7 +94,9 @@ async def resend_otp(payload: ResendOTPRequest, db: Session = Depends(load_datab
 
     otp_service.send_otp(payload.phone_number)
 
-    return ResendOTPResponse(message='Successfully resent OTP')
+    return ResendOTPResponse(
+        message='Successfully resent OTP'
+    )
 
 
 @router.post('/verify-otp', response_model=VerifyOTPResponse)
@@ -115,6 +118,7 @@ async def verify_otp(payload: VerifyOTPRequest, db: Session = Depends(load_datab
             detail='Invalid or expired OTP.',
         )
 
+    # Use Squad to verify the bank account name matches the registered name
     try:
         bank_info = await squad_service.lookup_bank_account(user.account_number, user.bank_code)
     except ValueError as exc:
@@ -128,16 +132,19 @@ async def verify_otp(payload: VerifyOTPRequest, db: Session = Depends(load_datab
         and user.last_name.upper() in bank_info['account_name'].upper()
     )
     if not name_ok:
-        msg = f'Bank account name "{bank_info["account_name"]}" does not match the registered name'
-        logger.info(msg)
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=msg)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f'Bank account name "{bank_info["account_name"]}" does not match '
+                f'the registered name "{user.first_name} {user.last_name}".'
+            ),
+        )
 
+    # Create the user's internal wallet (zero balance, managed by us)
     wallet = Wallet(user_id=user.id, balance=Decimal('0.00'), currency='NGN')
     db.add(wallet)
-
     user.account_verified = True
     user.phone_verified = True
-
     db.commit()
     db.refresh(wallet)
 
