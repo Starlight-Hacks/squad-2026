@@ -1,3 +1,4 @@
+"use-client"
 import { useEffect, useRef, useState } from "react";
 
 const useScrollReveal = (options: IntersectionObserverInit = { threshold: 0.1, rootMargin: '0px' }) => {

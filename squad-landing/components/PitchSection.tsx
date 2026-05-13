@@ -1,19 +1,8 @@
-import { 
-  ArrowRight, 
-  MessageCircle, 
-  BrainCircuit, 
-  CreditCard, 
-  ShieldCheck, 
-  TrendingUp, 
-  Briefcase,
-  ChevronRight,
-  Database,
-  Network
-} from 'lucide-react';
+import { ArrowRight} from 'lucide-react';
 import { Reveal } from './Reveal';
 
 
-const PitchSection = () => (
+export const PitchSection = () => (
   <section className="py-40 px-6 bg-black relative border-t border-white/5 overflow-hidden">
     <div className="absolute inset-0 bg-blue-600/5 bg-[radial-gradient(ellipse_at_bottom,_var(--tw-gradient-stops))] from-blue-900/20 via-black to-black"></div>
     <div className="max-w-5xl mx-auto text-center relative z-10">

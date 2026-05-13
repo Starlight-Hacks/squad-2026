@@ -1,5 +1,4 @@
 import { BarChart3, Users, MessageSquare, Settings } from "lucide-react";
-import { Reveal } from "./Reveal";
 
 interface SidebarProps {
   activeView: string;
