@@ -7,11 +7,13 @@ internally. Squad handles:
   - Outbound transfers         (used when a user sends money via WhatsApp)
 """
 
+import json
 from typing import TypedDict
 
 import httpx
 
 from app.config import settings
+from app.utils import logger
 
 
 class BankAccountInfo(TypedDict):
@@ -22,7 +24,7 @@ class BankAccountInfo(TypedDict):
 
 class TransferResult(TypedDict):
     reference: str
-    status: str   # 'success' | 'pending' | 'failed'
+    status: str  # 'success' | 'pending' | 'failed'
 
 
 def _headers() -> dict[str, str]:
@@ -41,13 +43,14 @@ async def lookup_bank_account(account_number: str, bank_code: str) -> BankAccoun
     url = f'{settings.squad_base_url}/payout/account/lookup'
 
     async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.get(
+        response = await client.post(
             url,
             headers=_headers(),
-            params={'account_number': account_number, 'bank_code': bank_code},
+            json={'account_number': account_number, 'bank_code': bank_code},
         )
 
     if response.status_code != 200:
+        # logger.info(f'Account lookup failed, returned\n: {json.loads(response.text)}')
         raise ValueError(f'Bank account lookup failed: {response.text}')
 
     data = response.json()
@@ -79,7 +82,7 @@ async def transfer(
         'amount': amount_kobo,
         'bank_code': recipient_bank_code,
         'account_number': recipient_account_number,
-        'account_name': '',   # populated by the caller after lookup
+        'account_name': '',  # populated by the caller after lookup
         'narration': narration,
         'currency_id': 'NGN',
     }

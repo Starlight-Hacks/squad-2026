@@ -8,7 +8,6 @@ class RegisterRequest(BaseModel):
     first_name: str
     last_name: str
     email: str
-    bvn: str
     date_of_birth: str
     address: str
     gender: str
@@ -22,13 +21,6 @@ class RegisterRequest(BaseModel):
     def validate_phone(cls, v: str) -> str:
         if not re.match(r'^\+234\d{10}$', v):
             raise ValueError('phone_number must be in E.164 format: +234XXXXXXXXXX')
-        return v
-
-    @field_validator('bvn')
-    @classmethod
-    def validate_bvn(cls, v: str) -> str:
-        if not re.match(r'^\d{11}$', v):
-            raise ValueError('bvn must be exactly 11 digits')
         return v
 
     @field_validator('account_number')
@@ -52,6 +44,13 @@ class RegisterRequest(BaseModel):
             raise ValueError('date_of_birth must be in DD/MM/YYYY format')
         return v
 
+    @field_validator('bank_code')
+    @classmethod
+    def validate_bank_code(cls, v: str) -> str:
+        if not re.match(r'^\d{6}$', v):
+            raise ValueError('bank_code must be exactly 6 digits')
+        return v
+
 
 class RegisterResponse(BaseModel):
     message: str
@@ -69,7 +68,6 @@ class ResendOTPResponse(BaseModel):
 class VerifyOTPRequest(BaseModel):
     phone_number: str
     otp: str
-    bvn: str  # Re-supplied because BVN is not stored in plaintext; used here only for identity cross-check
 
     @field_validator('otp')
     @classmethod
@@ -78,16 +76,9 @@ class VerifyOTPRequest(BaseModel):
             raise ValueError('otp must be exactly 6 digits')
         return v
 
-    @field_validator('bvn')
-    @classmethod
-    def validate_bvn(cls, v: str) -> str:
-        if not re.match(r'^\d{11}$', v):
-            raise ValueError('bvn must be exactly 11 digits')
-        return v
-
 
 class WalletDetails(BaseModel):
-    balance: str  # Decimal serialised as string to avoid float precision issues
+    balance: str
     currency: str
 
 
@@ -101,13 +92,13 @@ class VerifyOTPResponse(BaseModel):
 
 class SetPCTRequest(BaseModel):
     phone_number: str
-    pct: str  # 4–8 character alphanumeric PIN
+    pct: str
 
     @field_validator('pct')
     @classmethod
     def validate_pct(cls, v: str) -> str:
         if not re.match(r'^[A-Za-z0-9]{4,8}$', v):
-            raise ValueError('pct must be 4–8 alphanumeric characters')
+            raise ValueError('pct must be 4-8 alphanumeric characters')
         return v
 
 

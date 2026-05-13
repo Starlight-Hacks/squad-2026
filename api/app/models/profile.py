@@ -18,10 +18,14 @@ class Profile(Base):
     __tablename__ = 'profiles'
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('users.id'), unique=True)
     user: Mapped['User'] = relationship(back_populates='profile')
+
     business_type: Mapped[str]
     trust_score: Mapped[float]
     credit_score: Mapped[float]
     customer_count: Mapped[int]
+
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())

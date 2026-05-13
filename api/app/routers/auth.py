@@ -1,4 +1,3 @@
-import hashlib
 import logging
 from decimal import Decimal
 
@@ -39,10 +38,7 @@ def register(payload: RegisterRequest, db: Session = Depends(load_database)):
             detail='A verified account already exists for this phone number.',
         )
 
-    bvn_hash = hashlib.sha256(payload.bvn.encode()).hexdigest()
-
     if existing:
-        # Unverified re-registration — refresh details and resend OTP
         user = existing
         user.first_name = payload.first_name
         user.last_name = payload.last_name
@@ -50,7 +46,6 @@ def register(payload: RegisterRequest, db: Session = Depends(load_database)):
         user.date_of_birth = payload.date_of_birth
         user.address = payload.address
         user.gender = payload.gender
-        user.bvn_hash = bvn_hash
         user.account_number = payload.account_number
         user.bank_code = payload.bank_code
         user.geo_lat = payload.geo_lat
@@ -64,8 +59,7 @@ def register(payload: RegisterRequest, db: Session = Depends(load_database)):
             date_of_birth=payload.date_of_birth,
             address=payload.address,
             gender=payload.gender,
-            bvn_hash=bvn_hash,
-            bvn_verified=False,
+            account_verified=False,
             phone_verified=False,
             account_number=payload.account_number,
             bank_code=payload.bank_code,
@@ -99,9 +93,7 @@ async def resend_otp(payload: ResendOTPRequest, db: Session = Depends(load_datab
 
     otp_service.send_otp(payload.phone_number)
 
-    return ResendOTPResponse(
-        message='Successfully resent OTP'
-    )
+    return ResendOTPResponse(message='Successfully resent OTP')
 
 
 @router.post('/verify-otp', response_model=VerifyOTPResponse)
@@ -123,14 +115,6 @@ async def verify_otp(payload: VerifyOTPRequest, db: Session = Depends(load_datab
             detail='Invalid or expired OTP.',
         )
 
-    # Confirm the re-supplied BVN matches what was registered
-    if hashlib.sha256(payload.bvn.encode()).hexdigest() != user.bvn_hash:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail='Supplied BVN does not match the registered BVN.',
-        )
-
-    # Use Squad to verify the bank account name matches the registered name
     try:
         bank_info = await squad_service.lookup_bank_account(user.account_number, user.bank_code)
     except ValueError as exc:
@@ -144,19 +128,16 @@ async def verify_otp(payload: VerifyOTPRequest, db: Session = Depends(load_datab
         and user.last_name.upper() in bank_info['account_name'].upper()
     )
     if not name_ok:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                f'Bank account name "{bank_info["account_name"]}" does not match '
-                f'the registered name "{user.first_name} {user.last_name}".'
-            ),
-        )
+        msg = f'Bank account name "{bank_info["account_name"]}" does not match the registered name'
+        logger.info(msg)
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=msg)
 
-    # Create the user's internal wallet (zero balance, managed by us)
     wallet = Wallet(user_id=user.id, balance=Decimal('0.00'), currency='NGN')
     db.add(wallet)
-    user.bvn_verified = True
+
+    user.account_verified = True
     user.phone_verified = True
+
     db.commit()
     db.refresh(wallet)
 

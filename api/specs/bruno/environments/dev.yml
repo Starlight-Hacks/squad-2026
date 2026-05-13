@@ -11,8 +11,6 @@ variables:
   - secret: true
     name: email
   - secret: true
-    name: bvn
-  - secret: true
     name: dob
   - secret: true
     name: address
