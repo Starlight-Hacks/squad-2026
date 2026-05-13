@@ -22,6 +22,7 @@ class IntentKind(str, enum.Enum):
     PAYMENT = 'PAYMENT'
     PAYMENT_INCOMPLETE = 'PAYMENT_INCOMPLETE'
     BALANCE = 'BALANCE'
+    STATUS = 'STATUS'
     HELP = 'HELP'
     CANCEL = 'CANCEL'
     PCT_LIKE = 'PCT_LIKE'
@@ -67,6 +68,8 @@ def parse(text: str) -> Intent:
 
     if lowered in {'balance', 'bal', 'wallet', 'my balance'}:
         return Intent(kind=IntentKind.BALANCE)
+    if lowered in {'status', 'recent', 'last', 'history'}:
+        return Intent(kind=IntentKind.STATUS)
     if lowered in {'help', '?', 'menu', 'commands'}:
         return Intent(kind=IntentKind.HELP)
     if lowered in {'cancel', 'stop', 'abort', 'no'}:

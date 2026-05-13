@@ -43,6 +43,9 @@ def _now() -> datetime:
 
 
 def _generate_reference() -> str:
+    # Squad's payout API accepts alphanumeric + underscore (e.g.
+    # "SBS5B8VU36_Test222") and rejects hyphens / other punctuation as
+    # "Bad ref format".
     return f'SQD{secrets.token_hex(6).upper()}_{secrets.token_hex(4)}'
 
 
@@ -84,7 +87,9 @@ async def initiate(
     raw_message: Optional[str] = None,
 ) -> str:
     """Begin a new payment request. Returns a user-facing reply string."""
-    wallet: Wallet | None = db.query(Wallet).filter(Wallet.user_id == user.id).with_for_update().first()
+    wallet: Wallet | None = (
+        db.query(Wallet).filter(Wallet.user_id == user.id).with_for_update().first()
+    )
     if wallet is None:
         return 'Your wallet has not been set up. Please complete registration first.'
 
@@ -99,14 +104,8 @@ async def initiate(
     decision = fraud.screen(db, user, amount, recipient_account_number)
     if not decision.approved:
         _record_rejected(
-            db,
-            user,
-            amount,
-            recipient_account_number,
-            recipient_bank_code,
-            recipient_bank_name,
-            decision.reason or 'rejected',
-            raw_message,
+            db, user, amount, recipient_account_number, recipient_bank_code,
+            recipient_bank_name, decision.reason or 'rejected', raw_message,
         )
         return f'Transaction rejected: {decision.reason}'
 
@@ -159,13 +158,18 @@ async def confirm(db: Session, user: User, supplied_pct: str) -> str:
         return 'You have no pending transaction to confirm.'
 
     pct_row: PaymentConfirmationToken | None = (
-        db.query(PaymentConfirmationToken).filter(PaymentConfirmationToken.user_id == user.id).first()
+        db.query(PaymentConfirmationToken)
+        .filter(PaymentConfirmationToken.user_id == user.id)
+        .first()
     )
     if not pct_row:
         pending.status = TransactionStatus.FAILED.value
         pending.failure_reason = 'No PCT configured for this user.'
         db.commit()
-        return 'You have not set up a Payment Confirmation Token. Set one via /auth/set-pct before initiating payments.'
+        return (
+            'You have not set up a Payment Confirmation Token. '
+            'Set one via /auth/set-pct before initiating payments.'
+        )
 
     if not pct_service.verify_pct(supplied_pct, pct_row.token_salt, pct_row.token_hash):
         pending.status = TransactionStatus.REJECTED.value
@@ -180,7 +184,9 @@ async def confirm(db: Session, user: User, supplied_pct: str) -> str:
         db.commit()
         return f'Transaction rejected at confirmation: {decision.reason}'
 
-    wallet: Wallet | None = db.query(Wallet).filter(Wallet.user_id == user.id).with_for_update().first()
+    wallet: Wallet | None = (
+        db.query(Wallet).filter(Wallet.user_id == user.id).with_for_update().first()
+    )
     if wallet is None or wallet.balance < pending.amount + pending.fee:
         pending.status = TransactionStatus.FAILED.value
         pending.failure_reason = 'Insufficient funds at confirmation.'
@@ -208,21 +214,139 @@ async def confirm(db: Session, user: User, supplied_pct: str) -> str:
         pending.status = TransactionStatus.FAILED.value
         pending.failure_reason = str(exc)
         db.commit()
-        return f'We could not complete your transfer. Your balance has been restored. Reference: {pending.reference}'
+        return (
+            'We could not complete your transfer. Your balance has been restored. '
+            f'Reference: {pending.reference}'
+        )
 
     pending.squad_reference = result.get('reference')
-    pending.status = TransactionStatus.SUCCESS.value
+    _apply_squad_status(db, pending, wallet, result)
     db.commit()
 
+    return _completion_reply(pending, wallet)
+
+
+_SQUAD_SUCCESS = {'success', 'successful', 'completed'}
+_SQUAD_FAILED = {'failed', 'failure', 'reversed', 'rejected'}
+
+
+def _apply_squad_status(
+    db: Session,
+    tx: Transaction,
+    wallet: Wallet,
+    result: dict,
+) -> None:
+    """Translate a Squad transfer/requery response into our internal status.
+
+    The wallet was already debited at confirmation time. Only a terminal
+    FAILED/REVERSED outcome refunds it; pending stays in PROCESSING so the
+    caller can re-query later without double-counting.
+    """
+    status = (result.get('status') or 'pending').lower()
+    if status in _SQUAD_SUCCESS:
+        tx.status = TransactionStatus.SUCCESS.value
+        tx.failure_reason = None
+    elif status in _SQUAD_FAILED:
+        if tx.status != TransactionStatus.FAILED.value:
+            wallet.balance = wallet.balance + tx.amount + tx.fee
+        tx.status = TransactionStatus.FAILED.value
+        tx.failure_reason = result.get('message') or 'Squad reported the transfer failed.'
+    else:
+        tx.status = TransactionStatus.PROCESSING.value
+
+
+def _completion_reply(tx: Transaction, wallet: Wallet) -> str:
+    if tx.status == TransactionStatus.SUCCESS.value:
+        headline = 'Payment sent.'
+    elif tx.status == TransactionStatus.FAILED.value:
+        return (
+            'We could not complete your transfer. Your balance has been restored.\n'
+            f'• Reference: {tx.reference}\n'
+            f'• Reason: {tx.failure_reason}'
+        )
+    else:
+        headline = 'Payment submitted. Awaiting Squad confirmation; reply STATUS to check.'
+
     return (
-        'Payment sent.\n\n'
-        f'• To: {pending.recipient_account_name}\n'
-        f'• Bank: {pending.recipient_bank_name}\n'
-        f'• Account: {pending.recipient_account_number}\n'
-        f'• Amount: NGN {pending.amount:,.2f}\n'
-        f'• Reference: {pending.reference}\n'
-        f'• New balance: NGN {wallet.balance:,.2f}'
+        f'{headline}\n\n'
+        f'• To: {tx.recipient_account_name}\n'
+        f'• Bank: {tx.recipient_bank_name}\n'
+        f'• Account: {tx.recipient_account_number}\n'
+        f'• Amount: NGN {tx.amount:,.2f}\n'
+        f'• Reference: {tx.reference}\n'
+        f'• Wallet balance: NGN {wallet.balance:,.2f}'
     )
+
+
+async def refresh_processing(db: Session, user: User) -> None:
+    """Re-query Squad for any of this user's PROCESSING transactions and
+    promote them to SUCCESS / FAILED if Squad now reports a terminal state."""
+    processing = (
+        db.query(Transaction)
+        .filter(
+            Transaction.sender_id == user.id,
+            Transaction.status == TransactionStatus.PROCESSING.value,
+        )
+        .all()
+    )
+    if not processing:
+        return
+
+    wallet: Wallet | None = (
+        db.query(Wallet).filter(Wallet.user_id == user.id).with_for_update().first()
+    )
+    if wallet is None:
+        return
+
+    changed = False
+    for tx in processing:
+        try:
+            result = await squad.requery(tx.reference)
+        except ValueError as exc:
+            logger.warning('Requery failed for %s: %s', tx.reference, exc)
+            continue
+        before = tx.status
+        _apply_squad_status(db, tx, wallet, result)
+        if tx.status != before:
+            changed = True
+
+    if changed:
+        db.commit()
+
+
+def apply_external_status(
+    db: Session,
+    reference: str,
+    status: str,
+    message: str | None = None,
+) -> Transaction | None:
+    """Reconcile a transaction from an out-of-band signal (Squad webhook).
+
+    Returns the updated row, or ``None`` if no matching transaction exists.
+    """
+    tx: Transaction | None = (
+        db.query(Transaction).filter(Transaction.reference == reference).first()
+    )
+    if tx is None:
+        return None
+    if tx.status in {
+        TransactionStatus.SUCCESS.value,
+        TransactionStatus.FAILED.value,
+        TransactionStatus.REJECTED.value,
+        TransactionStatus.EXPIRED.value,
+        TransactionStatus.CANCELLED.value,
+    }:
+        return tx  # Already terminal — ignore.
+
+    wallet: Wallet | None = (
+        db.query(Wallet).filter(Wallet.user_id == tx.sender_id).with_for_update().first()
+    )
+    if wallet is None:
+        return tx
+
+    _apply_squad_status(db, tx, wallet, {'status': status, 'message': message})
+    db.commit()
+    return tx
 
 
 def cancel_pending(db: Session, user: User) -> str:
@@ -233,6 +357,26 @@ def cancel_pending(db: Session, user: User) -> str:
     pending.failure_reason = 'Cancelled by user.'
     db.commit()
     return f'Transaction {pending.reference} cancelled.'
+
+
+def show_status(db: Session, user: User) -> str:
+    recent = (
+        db.query(Transaction)
+        .filter(Transaction.sender_id == user.id)
+        .order_by(Transaction.created_at.desc())
+        .limit(3)
+        .all()
+    )
+    if not recent:
+        return 'No recent transactions found.'
+    lines = ['Recent transactions:']
+    for tx in recent:
+        lines.append(
+            f'• {tx.reference}: NGN {tx.amount:,.2f} → '
+            f'{tx.recipient_account_name or tx.recipient_account_number} '
+            f'[{tx.status}]'
+        )
+    return '\n'.join(lines)
 
 
 def show_balance(db: Session, user: User) -> str:
@@ -247,6 +391,7 @@ def help_text() -> str:
         'Squad WhatsApp commands:\n\n'
         '• Send money: "send 2500 naira to 0123456789 GTBank"\n'
         '• Check balance: "balance"\n'
+        '• Recent transactions: "status"\n'
         '• Cancel a pending request: "cancel"\n'
         '• Show this help: "help"\n\n'
         'Confirm a payment by replying with your PCT within 10 minutes.'
