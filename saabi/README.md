@@ -13,7 +13,7 @@ SAABI is a revolutionary fintech ecosystem designed to bridge the gap between Ni
 ## Tech Stack
 
 - **Frontend**: React 19, TypeScript, Tailwind CSS 4.0
-- **3D Graphics**: Three.js, React Three Fiber, React Three Drei
+- **3D Graphics**: Three.js
 - **Animations**: GSAP (GreenSock), Framer Motion
 - **Visualizations**: Chart.js, React-Chartjs-2
 - **Icons**: Lucide React
@@ -34,3 +34,8 @@ SAABI is a revolutionary fintech ecosystem designed to bridge the gap between Ni
    ```
 
 ---
+
+## Live URL
+
+You can find the site at:
+[SAABI]("https://saabi.netlify.app/")
