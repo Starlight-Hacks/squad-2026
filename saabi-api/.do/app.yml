@@ -10,7 +10,7 @@
 #   alembic migrations -> jobs.migrate      (runs once before each deploy)
 
 name: saabi-api
-region: lon # London — closest DO region to NG. Change to nyc/ams/sgp as you like.
+region: lon1 # London
 
 # App-level env vars are injected into every component (api, worker, migrate job).
 # ${db.*} and ${redis.*} are binding variables — DO fills them in automatically
@@ -26,8 +26,6 @@ envs:
     value: ${db.PASSWORD}
   - key: DATABASE_NAME
     value: ${db.DATABASE}
-  # Managed Valkey hands back a rediss:// (TLS) URL. Celery's redis broker needs
-  # ssl_cert_reqs set or it refuses the connection — appended here so it "just works".
   - key: REDIS_URL
     value: ${redis.DATABASE_URL}?ssl_cert_reqs=CERT_NONE
 
@@ -40,7 +38,6 @@ envs:
   - key: DB_POOL_RECYCLE
     value: "1000"
 
-  # ---- Fill these in (DO console > Settings > App-Level Env Vars, or edit here) ----
   - key: SQUAD_SECRET_KEY
     value: PUT_VALUE_HERE
     type: SECRET
@@ -59,7 +56,7 @@ envs:
   - key: TWILIO_FROM_NUMBER
     value: PUT_VALUE_HERE
   - key: TWILIO_WHATSAPP_NUMBER
-    value: whatsapp:+14155238886
+    value: PUT_VALUE_HERE
   - key: TWILIO_JOIN_CODE
     value: join <your-sandbox-keyword>
   - key: TWILIO_DEMO_MODE
@@ -73,7 +70,6 @@ services:
       repo: Starlight-Hacks/squad-2026
       branch: main
       deploy_on_push: true
-    # Dockerfile CMD already runs uvicorn on 8000 — just tell App Platform that port.
     http_port: 8000
     instance_count: 1
     instance_size_slug: apps-s-1vcpu-0.5gb
@@ -114,4 +110,5 @@ databases:
   - name: redis
     engine: VALKEY
     version: "8"
-    production: false 
+    production: true 
+    cluster_name: PUT_VALUE_HERE

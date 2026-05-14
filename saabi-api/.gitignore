@@ -13,3 +13,5 @@ wheels/
 .ropeproject/
 
 .ash_history
+
+app.local.yml
