@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from app.models.profile import Profile
     from app.models.transaction import Transaction
     from app.models.wallet import Wallet
+    from app.models.wallet_funding import WalletFunding
 
 
 class User(Base):
@@ -28,6 +29,7 @@ class User(Base):
         back_populates='user', uselist=False
     )
     transactions: Mapped[list['Transaction']] = relationship(back_populates='sender')
+    wallet_fundings: Mapped[list['WalletFunding']] = relationship(back_populates='user')
 
     phone_number: Mapped[str] = mapped_column(unique=True)
     first_name: Mapped[str]

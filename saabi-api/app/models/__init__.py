@@ -4,13 +4,16 @@ from app.models.profile import Profile
 from app.models.transaction import Transaction, TransactionStatus
 from app.models.user import User
 from app.models.wallet import Wallet
+from app.models.wallet_funding import FundingStatus, WalletFunding
 
 __all__ = [
     'Base',
+    'FundingStatus',
     'PaymentConfirmationToken',
     'Profile',
     'Transaction',
     'TransactionStatus',
     'User',
     'Wallet',
+    'WalletFunding',
 ]
