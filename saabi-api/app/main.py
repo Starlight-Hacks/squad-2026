@@ -2,7 +2,7 @@ import logging
 
 from fastapi import FastAPI
 
-from app.routers import auth, webhooks
+from app.routers import auth, wallet, webhooks
 
 logging.basicConfig(
     level=logging.INFO,
@@ -12,6 +12,7 @@ logging.basicConfig(
 app = FastAPI(title='Squad Hackathon (2026) API')
 
 app.include_router(auth.router)
+app.include_router(wallet.router)
 app.include_router(webhooks.router)
 
 
