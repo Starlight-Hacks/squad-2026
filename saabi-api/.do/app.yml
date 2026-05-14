@@ -105,7 +105,10 @@ databases:
   - name: db
     engine: PG
     version: "16"
-    production: false 
+    production: true
+    cluster_name: saabi-pg
+    db_name: defaultdb
+    db_user: doadmin 
 
   - name: redis
     engine: VALKEY
