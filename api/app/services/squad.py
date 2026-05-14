@@ -18,11 +18,43 @@ We therefore re-query on the next user interaction (and accept Squad
 webhooks) instead of assuming the immediate response is terminal.
 """
 
-from typing import TypedDict
+import logging
+from typing import Any, TypedDict
 
 import httpx
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+# Squad's response shape varies by endpoint and product. These are every key
+# that has been observed to carry the transfer state across transfer /
+# requery / webhook payloads. We check all of them.
+_STATUS_KEYS = ('status', 'transaction_status', 'transactionStatus', 'state')
+
+
+def _extract_status(payload: dict[str, Any]) -> str | None:
+    """Pull a transfer status out of any reasonable Squad response shape.
+
+    Squad sometimes nests it under ``data``, sometimes places it at the
+    root, and sometimes uses ``transaction_status`` instead of ``status``.
+    Returns the first non-empty value found, lower-cased; ``None`` if absent.
+    """
+    candidates = [payload, payload.get('data') or {}]
+    for obj in candidates:
+        if not isinstance(obj, dict):
+            continue
+        for key in _STATUS_KEYS:
+            value = obj.get(key)
+            if value:
+                return str(value).lower()
+    return None
+
+
+def _extract_message(payload: dict[str, Any]) -> str:
+    detail = payload.get('data') if isinstance(payload.get('data'), dict) else {}
+    return str(detail.get('message') or detail.get('remark') or payload.get('message') or '')
 
 
 class BankAccountInfo(TypedDict):
@@ -33,7 +65,7 @@ class BankAccountInfo(TypedDict):
 
 class TransferResult(TypedDict):
     reference: str
-    status: str   # 'success' | 'pending' | 'failed' | 'reversed'
+    status: str  # 'success' | 'pending' | 'failed' | 'reversed'
     message: str  # Squad-provided detail; useful for failure reasons
 
 
@@ -53,10 +85,10 @@ async def lookup_bank_account(account_number: str, bank_code: str) -> BankAccoun
     url = f'{settings.squad_base_url}/payout/account/lookup'
 
     async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.get(
+        response = await client.post(
             url,
             headers=_headers(),
-            params={'account_number': account_number, 'bank_code': bank_code},
+            json={'account_number': account_number, 'bank_code': bank_code},
         )
 
     if response.status_code != 200:
@@ -79,7 +111,6 @@ async def transfer(
     recipient_bank_code: str,
     recipient_account_name: str,
     reference: str,
-    narration: str = 'Squad payment',
 ) -> TransferResult:
     """Initiate an outbound bank transfer via Squad's payout API.
 
@@ -93,7 +124,6 @@ async def transfer(
         'bank_code': recipient_bank_code,
         'account_number': recipient_account_number,
         'account_name': recipient_account_name,
-        'narration': narration,
         'currency_id': 'NGN',
     }
 
@@ -104,14 +134,19 @@ async def transfer(
         raise ValueError(f'Transfer failed: {response.text}')
 
     data = response.json()
+    logger.info('Squad transfer %s -> HTTP %s, body=%s', reference, response.status_code, data)
+
     if not data.get('success'):
         raise ValueError(f'Transfer unsuccessful: {data.get("message")}')
 
-    detail = data.get('data') or {}
+    # HTTP 200 + success=true means Squad has accepted the transfer and
+    # debited the merchant pool. That is the success signal — only downgrade
+    # to PROCESSING/FAILED if Squad explicitly says so in the body.
+    status = _extract_status(data) or 'success'
     return TransferResult(
         reference=reference,
-        status=str(detail.get('status', 'pending')).lower(),
-        message=str(detail.get('message') or data.get('message') or ''),
+        status=status,
+        message=_extract_message(data),
     )
 
 
@@ -127,16 +162,26 @@ async def requery(reference: str) -> TransferResult:
     async with httpx.AsyncClient(timeout=15.0) as client:
         response = await client.post(url, headers=_headers(), json=payload)
 
+    # Squad's requery semantics are partially conveyed by HTTP status code:
+    #   200 success, 424 timeout-retry, 412 reversed, 4xx other failures.
+    if response.status_code == 412:
+        return TransferResult(reference=reference, status='reversed', message='Transaction reversed')
+    if response.status_code == 424:
+        return TransferResult(reference=reference, status='pending', message='Squad re-query timeout')
     if response.status_code not in (200, 201):
-        raise ValueError(f'Requery failed: {response.text}')
+        raise ValueError(f'Requery failed (HTTP {response.status_code}): {response.text}')
 
-    data = response.json()
-    if not data.get('success'):
+    data = response.json() if response.content else {}
+    logger.info('Squad requery %s -> HTTP %s, body=%s', reference, response.status_code, data)
+
+    if data.get('success') is False:
         raise ValueError(f'Requery unsuccessful: {data.get("message")}')
 
-    detail = data.get('data') or {}
+    # If Squad returned 200 + success=true but no explicit status field, the
+    # transfer is finalised — treat the HTTP code as the status indicator.
+    status = _extract_status(data) or 'success'
     return TransferResult(
         reference=reference,
-        status=str(detail.get('status', 'pending')).lower(),
-        message=str(detail.get('message') or data.get('message') or ''),
+        status=status,
+        message=_extract_message(data),
     )

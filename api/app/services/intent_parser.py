@@ -19,6 +19,7 @@ from app.services import banks
 
 
 class IntentKind(str, enum.Enum):
+    GREETING = 'GREETING'
     PAYMENT = 'PAYMENT'
     PAYMENT_INCOMPLETE = 'PAYMENT_INCOMPLETE'
     BALANCE = 'BALANCE'
@@ -66,6 +67,10 @@ def parse(text: str) -> Intent:
     stripped = text.strip()
     lowered = stripped.lower()
 
+    # haha
+    if lowered in {'hi', 'hello', 'whats up', 'saabi', 'how far', 'hey', 'my gee', 'big man'}:
+        return Intent(kind=IntentKind.GREETING)
+
     if lowered in {'balance', 'bal', 'wallet', 'my balance'}:
         return Intent(kind=IntentKind.BALANCE)
     if lowered in {'status', 'recent', 'last', 'history'}:
@@ -87,19 +92,23 @@ def parse(text: str) -> Intent:
     if account or amount or has_payment_verb:
         bank = banks.resolve(stripped)
         if not account:
-            return Intent(kind=IntentKind.PAYMENT_INCOMPLETE, missing='account_number',
-                          amount=amount,
-                          bank_code=bank.code if bank else None,
-                          bank_name=bank.name if bank else None)
+            return Intent(
+                kind=IntentKind.PAYMENT_INCOMPLETE,
+                missing='account_number',
+                amount=amount,
+                bank_code=bank.code if bank else None,
+                bank_name=bank.name if bank else None,
+            )
         if not amount:
-            return Intent(kind=IntentKind.PAYMENT_INCOMPLETE, missing='amount',
-                          account_number=account,
-                          bank_code=bank.code if bank else None,
-                          bank_name=bank.name if bank else None)
+            return Intent(
+                kind=IntentKind.PAYMENT_INCOMPLETE,
+                missing='amount',
+                account_number=account,
+                bank_code=bank.code if bank else None,
+                bank_name=bank.name if bank else None,
+            )
         if not bank:
-            return Intent(kind=IntentKind.PAYMENT_INCOMPLETE, missing='bank',
-                          amount=amount,
-                          account_number=account)
+            return Intent(kind=IntentKind.PAYMENT_INCOMPLETE, missing='bank', amount=amount, account_number=account)
         return Intent(
             kind=IntentKind.PAYMENT,
             amount=amount,
@@ -147,7 +156,7 @@ def _extract_amount(text: str, account: Optional[str]) -> Optional[Decimal]:
 
         # Score: prefer matches that include a currency marker or multiplier.
         score = 0
-        window = scrubbed[max(0, match.start() - 8):match.end() + 8].lower()
+        window = scrubbed[max(0, match.start() - 8) : match.end() + 8].lower()
         if any(token in window for token in ('₦', 'ngn', 'naira')) or mult:
             score += 2
         if match.group(0).strip().startswith(('₦', 'N', 'n')):

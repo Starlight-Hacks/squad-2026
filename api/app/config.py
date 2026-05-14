@@ -18,6 +18,7 @@ class Settings(BaseSettings):
 
     squad_secret_key: str
     squad_base_url: str
+    squad_merchant_id: str
 
     twilio_account_sid: str
     twilio_auth_token: str

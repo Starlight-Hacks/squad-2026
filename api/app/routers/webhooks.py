@@ -25,9 +25,8 @@ from twilio.request_validator import RequestValidator
 from app.config import settings
 from app.database import load_database
 from app.models.user import User
-from app.services import payments, whatsapp
-from app.services.intent_parser import Intent, IntentKind
-from app.services.intent_parser import parse as parse_intent
+from app.services import payments, squad as squad_service, whatsapp
+from app.services.intent_parser import Intent, IntentKind, parse as parse_intent
 
 router = APIRouter(prefix='/webhooks', tags=['webhooks'])
 logger = logging.getLogger(__name__)
@@ -53,10 +52,6 @@ async def whatsapp_inbound(
         return _twiml('This number is not registered with Squad. Visit our portal to sign up before sending payments.')
     if not user.phone_verified:
         return _twiml('Your phone number is not yet verified. Complete OTP verification first.')
-
-    # Roll up any PROCESSING transfers to their terminal Squad state before we
-    # answer — keeps the user-facing reply honest and the wallet consistent.
-    await payments.refresh_processing(db, user)
 
     pending = payments.get_active_pending(db, user)
     intent = parse_intent(body)
@@ -90,6 +85,9 @@ async def _dispatch_intent(db: Session, user: User, intent: Intent, body: str) -
             raw_message=body,
         )
 
+    if intent.kind == IntentKind.GREETING:
+        return _greeting_reply()
+
     if intent.kind == IntentKind.PAYMENT_INCOMPLETE:
         return _missing_field_reply(intent)
 
@@ -111,6 +109,12 @@ async def _dispatch_intent(db: Session, user: User, intent: Intent, body: str) -
     return 'I didn\'t understand that. Try: "send 2500 naira to 0123456789 GTBank", or reply HELP for options.'
 
 
+def _greeting_reply() -> str:
+    return (
+        'Hi! I\'m your friendly personal assistant from SAABI!, what shall we do today?\n\nSend "HELP" to learn more.'
+    )
+
+
 def _missing_field_reply(intent: Intent) -> str:
     if intent.missing == 'account_number':
         return 'Please include the recipient 10-digit account number.'
@@ -122,7 +126,9 @@ def _missing_field_reply(intent: Intent) -> str:
 
 
 def _twiml(message: str) -> Response:
-    return Response(content=whatsapp.twiml_reply(message), media_type='application/xml')
+    body = whatsapp.twiml_reply(message)
+    logger.info('TwiML reply: %s', body)
+    return Response(content=body, media_type='application/xml')
 
 
 def _normalise_from(raw: str) -> str:
@@ -144,6 +150,37 @@ class SquadTransferEvent(BaseModel):
     status: Optional[str] = None
     message: Optional[str] = None
     data: Optional[dict[str, Any]] = None
+
+
+@router.post('/squad/requery/{reference}')
+async def squad_manual_requery(
+    reference: str,
+    db: Session = Depends(load_database),
+):
+    """Manually re-query a transaction against Squad and reconcile our row.
+
+    Gated to demo mode so it isn't exposed in production. Returns both Squad's
+    raw status payload and the resulting internal status — useful while a
+    sandbox sit in 'pending' and you want to know whether Squad believes the
+    transfer actually completed.
+    """
+    if not settings.twilio_demo_mode:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    try:
+        result = await squad_service.requery(reference)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f'Squad requery failed: {exc}',
+        ) from exc
+
+    tx = payments.apply_external_status(db, reference, result['status'], result.get('message'))
+    return {
+        'squad': result,
+        'local_status': tx.status if tx else None,
+        'local_reference': tx.reference if tx else None,
+    }
 
 
 @router.post('/squad/transfer')
