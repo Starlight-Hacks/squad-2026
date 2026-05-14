@@ -2,7 +2,7 @@ services:
   api:
     depends_on:
       - database
-    container_name: api
+    container_name: saabi-api
     build: .
     command: uvicorn app.main:app --host 0.0.0.0 --reload --log-level debug
     ports:
@@ -16,7 +16,7 @@ services:
   worker:
     depends_on:
       - redis
-    container_name: celery_worker
+    container_name: saabi-api-worker
     build: .
     command: celery -A app.worker.celery_app worker --loglevel=info
     volumes:
@@ -26,7 +26,7 @@ services:
     restart: on-failure
 
   redis:
-    container_name: redis
+    container_name: saabi-redis
     image: redis:7-alpine
     ports:
       - "6379:6379"
@@ -35,7 +35,7 @@ services:
     restart: always
 
   database:
-    container_name: postgres
+    container_name: saabi-postgres
     image: postgres:18
     ports:
       - "5433:5432"
