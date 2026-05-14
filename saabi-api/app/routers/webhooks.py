@@ -1,7 +1,3 @@
-"""
-Twilio inbound webhooks.
-"""
-
 from __future__ import annotations
 
 import json
@@ -179,7 +175,7 @@ async def squad_manual_requery(
 
 @router.post('/squad/transfer')
 async def squad_transfer_status(
-    event: SquadTransferEvent,
+    request: Request,
     db: Session = Depends(load_database),
 ):
     """Receive Squad's transfer-status callback and reconcile our row.
@@ -187,7 +183,25 @@ async def squad_transfer_status(
     Squad pushes terminal status (success / failed / reversed) to the URL
     configured in the merchant dashboard. We use it to flip a PROCESSING
     transaction to its final state without waiting for the user to ping us.
+
+    A spoofed callback could mark a real transfer as reversed and refund the
+    wallet, so we verify Squad's signature over the raw body before trusting it.
     """
+    raw_body = await request.body()
+    signature = request.headers.get('x-squad-signature')
+
+    if not squad_service.verify_webhook_signature(raw_body, signature):
+        logger.warning('Squad transfer webhook rejected: bad or missing signature.')
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Invalid Squad signature.')
+
+    try:
+        event = SquadTransferEvent.model_validate_json(raw_body)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Webhook body is not valid JSON.',
+        ) from exc
+
     detail = event.data or {}
     reference = (
         event.transaction_reference or event.reference or detail.get('transaction_reference') or detail.get('reference')
@@ -281,7 +295,6 @@ async def _validate_signature(request: Request) -> None:
     params = {k: v for k, v in form.multi_items() if isinstance(v, str)}
 
     validator = RequestValidator(settings.twilio_auth_token)
-
     for candidate in _candidate_urls(request):
         if validator.validate(candidate, params, signature):
             return
