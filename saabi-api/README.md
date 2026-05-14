@@ -15,13 +15,16 @@ The service is developed and run entirely inside containers. Docker gives us a
 reproducible runtime so the API, worker, database, and cache all behave the
 same on every machine, without anyone installing Postgres or Redis locally.
 
-Docker Compose defines four services:
+Docker Compose defines the application services:
 
 - `api` — the FastAPI app, built from the local `Dockerfile` (`python:alpine3.22`),
   served by `uvicorn` with `--reload` for live code updates.
 - `worker` — a Celery worker built from the same image, for background tasks.
 - `database` — `postgres:18`, exposed on host port `5433`.
 - `redis` — `redis:7-alpine`, the Celery broker and result backend.
+
+It also runs a local observability stack (`prometheus`, `loki`, `promtail`,
+`tempo`, `grafana`) — see [Observability](#observability) below.
 
 The `api` and `worker` containers mount the project directory as a volume, so
 edits on the host are picked up without a rebuild.
@@ -54,6 +57,34 @@ two-step conversation (intent, then PCT confirmation). Twilio is also used to
 send OTPs during registration. In production, inbound webhooks are verified
 against Twilio's request signature; `TWILIO_DEMO_MODE=true` bypasses that check
 so local Bruno calls can exercise the flow.
+
+## Observability
+
+`docker compose up` also starts a full local telemetry stack. Once it's up,
+open Grafana at **http://localhost:3000** (anonymous admin access is enabled —
+no login needed). The pre-provisioned **SAABI API — Overview** dashboard shows
+request rates, latency percentiles, status codes, and live logs.
+
+What gets collected:
+
+- **Metrics** — `prometheus-fastapi-instrumentator` exposes `/metrics` on the
+  API (request counts, latency histograms, sizes). `prometheus` scrapes it
+  every 15s and Grafana reads from it.
+- **Logs** — `promtail` tails every container's stdout/stderr via the Docker
+  socket and ships it to `loki`. Query them in Grafana's Explore view or the
+  logs panel on the dashboard, e.g. `{container="saabi-api"}`.
+- **Traces** — the API and Celery worker are instrumented with OpenTelemetry
+  (FastAPI, SQLAlchemy, Redis, httpx, requests, Celery). Spans are exported
+  over OTLP gRPC to `tempo`. Trace and span IDs are also injected into log
+  lines, so logs and traces cross-link in Grafana.
+
+Ports: Grafana `3000`, Prometheus `9090`, Loki `3100`, Tempo `3200`, OTLP
+ingest `4317`.
+
+Tracing is controlled by the `OTEL_*` variables in `.env`. Set
+`OTEL_ENABLED=false` to run the app without exporting traces (useful when
+running the API outside compose, where `tempo` isn't reachable). The configs
+for each component live under `observability/`.
 
 ## Tech Stack
 
