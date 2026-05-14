@@ -18,6 +18,8 @@ We therefore re-query on the next user interaction (and accept Squad
 webhooks) instead of assuming the immediate response is terminal.
 """
 
+import hashlib
+import hmac
 import logging
 from typing import Any, TypedDict
 
@@ -26,6 +28,25 @@ import httpx
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def verify_webhook_signature(raw_body: bytes, signature: str | None) -> bool:
+    """Check Squad's ``x-squad-signature`` header against the raw request body.
+
+    Squad signs collection webhooks with HMAC-SHA512 over the *exact* bytes it
+    sent, keyed with our merchant secret. We compare in constant time. This
+    matters most for the funding webhook — it mints wallet balance, so an
+    unauthenticated caller must never be able to drive it.
+    """
+    if not signature:
+        return False
+
+    expected = hmac.new(
+        settings.squad_secret_key.encode(),
+        raw_body,
+        hashlib.sha512,
+    ).hexdigest()
+    return hmac.compare_digest(expected, signature.strip().lower())
 
 
 # Squad's response shape varies by endpoint and product. These are every key
@@ -77,7 +98,7 @@ def _headers() -> dict[str, str]:
 
 
 async def lookup_bank_account(account_number: str, bank_code: str) -> BankAccountInfo:
-    """Resolve the account name for a NUBAN account number and bank code.
+    """Resolve the account name for an  account number and bank code.
 
     Used during registration (identity check) and before every payment
     (show recipient details to the user before they confirm).
