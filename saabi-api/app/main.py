@@ -16,6 +16,10 @@ app.include_router(wallet.router)
 app.include_router(webhooks.router)
 
 
+@app.get('/', status_code=200)
+def get_index():
+    return {'message': "SAABI's API is online, please look at /docs for public endpoints"}
+
 @app.get('/health', status_code=200)
 def get_health():
     return {'message': 'API is reachable'}
