@@ -1,19 +1,10 @@
 """
 Twilio inbound webhooks.
-
-The WhatsApp endpoint is the entire user-facing surface for payments. It
-must be:
-
-* Cheap — Twilio retries on slow responses, so we keep DB work to the
-  minimum needed for the next reply.
-* Trustworthy — we validate Twilio signatures in production. Demo mode
-  bypasses validation so local Bruno calls can exercise the flow.
-* Stateful — the same user phone number on consecutive messages drives a
-  two-step conversation (intent → PCT confirmation).
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Annotated, Any, Optional
 
@@ -25,8 +16,11 @@ from twilio.request_validator import RequestValidator
 from app.config import settings
 from app.database import load_database
 from app.models.user import User
-from app.services import payments, squad as squad_service, whatsapp
-from app.services.intent_parser import Intent, IntentKind, parse as parse_intent
+from app.services import funding as funding_service
+from app.services import payments, whatsapp
+from app.services import squad as squad_service
+from app.services.intent_parser import Intent, IntentKind
+from app.services.intent_parser import parse as parse_intent
 
 router = APIRouter(prefix='/webhooks', tags=['webhooks'])
 logger = logging.getLogger(__name__)
@@ -216,6 +210,65 @@ async def squad_transfer_status(
     return {'received': True, 'matched': True, 'status': tx.status}
 
 
+def _extract_charge_fields(payload: dict[str, Any]) -> tuple[str | None, str | None, str | None, str | None]:
+    """Pull (reference, status, squad_ref, message) out of a Squad charge webhook.
+
+    Squad nests the useful bits under ``Body`` and sometimes mirrors them at
+    the root, so we check both. ``reference`` is *our* funding reference — the
+    value we generated at init time and passed to the modal.
+    """
+    body = payload.get('Body') if isinstance(payload.get('Body'), dict) else {}
+
+    reference = body.get('transaction_ref') or body.get('transaction_reference') or payload.get('TransactionRef')
+    status_value = body.get('transaction_status') or body.get('status') or payload.get('Event')
+    squad_ref = body.get('gateway_ref') or body.get('id') or payload.get('TransactionRef')
+    message = body.get('message') or payload.get('message')
+
+    return reference, status_value, squad_ref, message
+
+
+@router.post('/squad/charge')
+async def squad_charge_status(
+    request: Request,
+    db: Session = Depends(load_database),
+):
+    """Receive Squad's collection webhook and credit the user's wallet.
+
+    Fired after a user completes payment in Squad's modal. Unlike the transfer
+    webhook, this one *mints* wallet balance, so we verify Squad's signature
+    before trusting a single byte of it.
+    """
+    raw_body = await request.body()
+    signature = request.headers.get('x-squad-signature')
+
+    if not squad_service.verify_webhook_signature(raw_body, signature):
+        logger.warning('Squad charge webhook rejected: bad or missing signature.')
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Invalid Squad signature.')
+
+    try:
+        payload = json.loads(raw_body)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Webhook body is not valid JSON.',
+        ) from exc
+
+    reference, status_value, squad_ref, message = _extract_charge_fields(payload)
+    if not reference or not status_value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Webhook missing transaction reference or status.',
+        )
+
+    funding = funding_service.apply_charge_status(db, reference, status_value, squad_ref, message)
+    if funding is None:
+        logger.info('Squad charge webhook for unknown reference %s — ignoring', reference)
+        return {'received': True, 'matched': False}
+
+    logger.info('Squad charge webhook reconciled %s -> %s', reference, funding.status)
+    return {'received': True, 'matched': True, 'status': funding.status}
+
+
 async def _validate_signature(request: Request) -> None:
     if settings.twilio_demo_mode:
         return
@@ -228,9 +281,7 @@ async def _validate_signature(request: Request) -> None:
     params = {k: v for k, v in form.multi_items() if isinstance(v, str)}
 
     validator = RequestValidator(settings.twilio_auth_token)
-    # Twilio signs the public URL it called. When we're behind ngrok / a load
-    # balancer, str(request.url) reflects the inner http://localhost view, so
-    # we try every reasonable reconstruction before giving up.
+
     for candidate in _candidate_urls(request):
         if validator.validate(candidate, params, signature):
             return
@@ -243,13 +294,15 @@ def _candidate_urls(request: Request) -> list[str]:
     proto = request.headers.get('x-forwarded-proto', request.url.scheme)
     host = request.headers.get('x-forwarded-host') or request.headers.get('host') or request.url.netloc
     path_qs = request.url.path
+
     if request.url.query:
         path_qs = f'{path_qs}?{request.url.query}'
+
     urls = [
         f'{proto}://{host}{path_qs}',
         f'https://{host}{path_qs}',
         str(request.url),
     ]
-    # De-dupe while preserving order.
+
     seen: set[str] = set()
     return [u for u in urls if not (u in seen or seen.add(u))]
