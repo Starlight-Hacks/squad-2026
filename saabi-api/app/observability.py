@@ -57,9 +57,14 @@ def _instrument_shared() -> None:
     if _shared_done:
         return
     # Inject trace/span IDs into log records, then surface them in the log format.
+    # `defaults` keeps the formatter safe for records created before instrumentation
+    # (or by code paths that bypass OTel's log record factory).
     LoggingInstrumentor().instrument(set_logging_format=False)
+    formatter = logging.Formatter(
+        _LOG_FORMAT, defaults={'otelTraceID': '-', 'otelSpanID': '-'}
+    )
     for handler in logging.getLogger().handlers:
-        handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+        handler.setFormatter(formatter)
 
     from app.database import engine
 
