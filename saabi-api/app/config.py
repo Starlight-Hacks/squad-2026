@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     twilio_join_code: str
     twilio_demo_mode: bool
 
+    otel_enabled: bool = True
+    otel_service_name: str = 'saabi-api'
+    otel_exporter_otlp_endpoint: str = 'http://tempo:4317'
+
     model_config = SettingsConfigDict(env_file='.env')
 
     @computed_field

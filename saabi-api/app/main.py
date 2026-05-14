@@ -1,7 +1,9 @@
 import logging
 
 from fastapi import FastAPI
+from prometheus_fastapi_instrumentator import Instrumentator
 
+from app.observability import setup_api_observability
 from app.routers import auth, wallet, webhooks
 
 logging.basicConfig(
@@ -10,6 +12,10 @@ logging.basicConfig(
 )
 
 app = FastAPI(title='Squad Hackathon (2026) API')
+
+# Exposes /metrics for Prometheus and sends traces to Tempo via OTLP.
+Instrumentator().instrument(app).expose(app, include_in_schema=False)
+setup_api_observability(app)
 
 app.include_router(auth.router)
 app.include_router(wallet.router)
