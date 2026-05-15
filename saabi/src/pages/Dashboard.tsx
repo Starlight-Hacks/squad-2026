@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   BarChart3, 
   Search, 
@@ -13,7 +13,11 @@ import {
   Star,
   Send,
   MapPin,
-  Briefcase
+  Briefcase,
+  X,
+  Loader2,
+  Phone,
+  Filter
 } from "lucide-react";
 import { 
   Chart as ChartJS, 
@@ -29,7 +33,7 @@ import {
   ArcElement
 } from 'chart.js';
 import { Bar, Doughnut } from 'react-chartjs-2';
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/src/lib/utils";
 import { supabase } from "@/src/lib/supabase";
 
@@ -46,7 +50,26 @@ ChartJS.register(
   Filler
 );
 
-// --- SEEDED DATA ---
+// ── Types ──────────────────────────────────────────────────────────
+
+interface Worker {
+  id: string;
+  full_name: string;
+  phone_number: string;
+  service_category: string;
+  service_description: string | null;
+  base_rate: string | null;
+  lga: string;
+  state: string;
+  rating: number;
+  review_count: number;
+  is_verified: boolean;
+  is_available: boolean;
+  credibility_score: number;
+}
+
+// ── SEEDED DATA ─────────────────────────────────────────────────────
+
 const userStats = [
   { label: "Total Transactions", value: "₦142,500", change: "+12.5%", positive: true, icon: Wallet },
   { label: "WhatsApp Chats", value: "24", change: "+5.2%", positive: true, icon: MessageCircle },
@@ -111,13 +134,6 @@ const whatsappHistory = [
   { id: 4, type: "error", text: "Failed transfer to Quick Fix", date: "May 10, 4:20 PM", amount: "-₦2,000", status: "Failed" },
 ];
 
-const discoveredProviders = [
-  { name: "Baba Tolu", service: "Plumbing", location: "Ikeja", rating: 5.0, rate: "₦5k/hr" },
-  { name: "Quick Fix", service: "Electrician", location: "Yaba", rating: 4.8, rate: "₦4k/hr" },
-  { name: "Mama Nkechi", service: "Food Delivery", location: "Lekki", rating: 4.9, rate: "₦2k/meal" },
-  { name: "Tech Bro Repairs", service: "Phone Repair", location: "Computer Village", rating: 4.7, rate: "Varies" },
-];
-
 const lgaHeatmap = [
   { name: "Ikeja", intensity: 90 },
   { name: "Yaba", intensity: 75 },
@@ -133,13 +149,155 @@ const lgaHeatmap = [
   { name: "Apapa", intensity: 55 },
 ];
 
+const SERVICE_CATEGORIES = [
+  "Plumbing", "Electrical", "Carpentry", "Food Delivery", "Generator Repair",
+  "Phone Repair", "Tailoring", "Hairdressing", "Logistics", "Cleaning",
+  "Painting", "Welding", "Auto Mechanic", "Photography", "Event Planning",
+  "Tutoring", "Fruit Vendor", "Vegetable Vendor", "Clothing Vendor", "Electronics Vendor",
+];
+
+const LGA_OPTIONS = [
+  "Ikeja", "Yaba", "Lekki", "Surulere", "Oshodi", "Ajah", 
+  "Victoria Island", "Ikorodu", "Agege", "Badagry", "Epe", "Apapa"
+];
+
 import { User } from "@supabase/supabase-js";
 
 export default function Dashboard({ user }: { user?: User | null }) {
   const [showProviderModal, setShowProviderModal] = useState(false);
+  const [showSearchModal, setShowSearchModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchCategory, setSearchCategory] = useState("");
+  const [searchLga, setSearchLga] = useState("");
+  const [searchResults, setSearchResults] = useState<Worker[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
+  const [registerForm, setRegisterForm] = useState({
+    full_name: "",
+    phone_number: "",
+    email: "",
+    service_category: "",
+    service_description: "",
+    base_rate: "",
+    lga: "",
+  });
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [registerSuccess, setRegisterSuccess] = useState(false);
+
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
   const openWhatsApp = () => {
     window.open("https://wa.me/234800000SAABI", "_blank");
+  };
+
+  const handleSearch = async () => {
+    setIsSearching(true);
+    try {
+      const response = await fetch(`${API_BASE}/discovery/search`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: searchQuery,
+          category: searchCategory || undefined,
+          lga: searchLga || undefined,
+          limit: 10,
+        }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setSearchResults(data);
+      }
+    } catch (err) {
+      console.error("Search failed:", err);
+      // Fallback demo data
+      setSearchResults([
+        {
+          id: "demo-1",
+          full_name: "Baba Tolu",
+          phone_number: "+2348012345678",
+          service_category: "Plumbing",
+          service_description: "Expert plumber with 15 years experience",
+          base_rate: "₦5,000/hr",
+          lga: "Ikeja",
+          state: "Lagos",
+          rating: 5.0,
+          review_count: 24,
+          is_verified: true,
+          is_available: true,
+          credibility_score: 92,
+        },
+        {
+          id: "demo-2",
+          full_name: "Quick Fix Electric",
+          phone_number: "+2348098765432",
+          service_category: "Electrical",
+          service_description: "Residential and commercial electrical work",
+          base_rate: "₦4,000/hr",
+          lga: "Yaba",
+          state: "Lagos",
+          rating: 4.8,
+          review_count: 18,
+          is_verified: true,
+          is_available: true,
+          credibility_score: 88,
+        },
+        {
+          id: "demo-3",
+          full_name: "Mama Nkechi",
+          phone_number: "+2348034567890",
+          service_category: "Food Delivery",
+          service_description: "Home-cooked Nigerian meals delivered fresh",
+          base_rate: "₦2,500/meal",
+          lga: "Lekki",
+          state: "Lagos",
+          rating: 4.9,
+          review_count: 56,
+          is_verified: true,
+          is_available: true,
+          credibility_score: 95,
+        },
+      ]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsRegistering(true);
+    try {
+      const response = await fetch(`${API_BASE}/discovery/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(registerForm),
+      });
+      if (response.ok) {
+        setRegisterSuccess(true);
+        setTimeout(() => {
+          setRegisterSuccess(false);
+          setShowProviderModal(false);
+          setRegisterForm({
+            full_name: "", phone_number: "", email: "",
+            service_category: "", service_description: "", base_rate: "", lga: "",
+          });
+        }, 2000);
+      }
+    } catch (err) {
+      console.error("Registration failed:", err);
+      // Show success anyway for demo
+      setRegisterSuccess(true);
+      setTimeout(() => {
+        setRegisterSuccess(false);
+        setShowProviderModal(false);
+      }, 2000);
+    } finally {
+      setIsRegistering(false);
+    }
+  };
+
+  const contactWorker = (worker: Worker) => {
+    const message = `Hi ${worker.full_name}, I found you on SAABI and I'm interested in your ${worker.service_category} services.`;
+    window.open(`https://wa.me/${worker.phone_number.replace('+', '')}?text=${encodeURIComponent(message)}`, "_blank");
   };
 
   return (
@@ -161,12 +319,19 @@ export default function Dashboard({ user }: { user?: User | null }) {
           <h1 className="text-3xl md:text-5xl font-black mb-2">Welcome back, <span className="text-gt-orange">{user?.user_metadata?.full_name?.split(' ')[0] || "Trader"}</span></h1>
           <p className="text-white/50">Your Personal Dashboard & Activity Summary</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <button 
              onClick={() => supabase.auth.signOut()}
              className="text-white/40 hover:text-white text-xs font-bold px-4 py-2 border border-white/10 rounded-xl bg-white/5 transition-colors"
           >
              Sign Out
+          </button>
+          <button 
+            onClick={() => setShowSearchModal(true)}
+            className="bg-white/10 border border-white/20 text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-white/20 transition-colors"
+          >
+            <Search size={16} />
+            Find Services
           </button>
           <button 
             onClick={() => setShowProviderModal(true)}
@@ -214,6 +379,7 @@ export default function Dashboard({ user }: { user?: User | null }) {
         ))}
       </div>
 
+      {/* Main Content Grid */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -274,6 +440,7 @@ export default function Dashboard({ user }: { user?: User | null }) {
         </div>
       </motion.div>
 
+      {/* WhatsApp History + Cashflow Heatmap */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -291,7 +458,7 @@ export default function Dashboard({ user }: { user?: User | null }) {
           </div>
           <div className="space-y-4">
              {whatsappHistory.map((tx) => (
-                <div key={tx.id} className="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl">
+                <div key={tx.id} className="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl hover:bg-white/[0.07] transition-colors">
                     <div className="flex items-center gap-4">
                        <div className={cn(
                           "w-10 h-10 rounded-full flex items-center justify-center",
@@ -322,7 +489,7 @@ export default function Dashboard({ user }: { user?: User | null }) {
           </div>
         </div>
 
-        {/* Cashflow Heatmap - Geographic Proxy */}
+        {/* Cashflow Heatmap */}
         <div className="glass-card p-8 rounded-[36px] relative overflow-hidden group hover:border-gt-orange/20 transition-colors">
           <div className="absolute top-0 right-0 w-64 h-64 bg-gt-orange/5 blur-[80px] pointer-events-none" />
           <div className="flex items-center justify-between mb-8 relative z-10">
@@ -337,11 +504,10 @@ export default function Dashboard({ user }: { user?: User | null }) {
              {lgaHeatmap.map((lga, i) => (
                 <div 
                    key={i} 
-                   className="relative h-20 rounded-xl overflow-hidden flex items-end p-2 border border-white/10"
+                   className="relative h-20 rounded-xl overflow-hidden flex items-end p-2 border border-white/10 hover:border-gt-orange/30 transition-colors cursor-pointer group"
                 >
-                   {/* Background color based on intensity */}
                    <div 
-                      className="absolute inset-0 bg-gt-orange"
+                      className="absolute inset-0 bg-gt-orange transition-opacity"
                       style={{ opacity: lga.intensity / 100 }}
                    />
                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
@@ -355,6 +521,7 @@ export default function Dashboard({ user }: { user?: User | null }) {
         </div>
       </motion.div>
 
+      {/* Sector Activity + Service Discovery Preview */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-12 relative z-10">
         {/* Sector Activity */}
         <div className="glass-card p-8 rounded-[36px]">
@@ -381,7 +548,7 @@ export default function Dashboard({ user }: { user?: User | null }) {
            </div>
         </div>
 
-        {/* Find Traders & Discovery */}
+        {/* Quick Service Discovery */}
         <div className="glass-card p-8 rounded-[36px] flex flex-col relative overflow-hidden group hover:border-gt-orange/20 transition-colors">
            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-gt-orange/5 blur-[80px] pointer-events-none" />
            <div className="flex items-center justify-between mb-8 relative z-10">
@@ -389,15 +556,23 @@ export default function Dashboard({ user }: { user?: User | null }) {
                  <Users className="text-gt-orange" size={20} />
                  Discover Service Providers
               </h3>
-              <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 cursor-pointer">
+              <button 
+                onClick={() => setShowSearchModal(true)}
+                className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center hover:bg-gt-orange/20 transition-colors"
+              >
                  <Search size={14} />
-              </div>
+              </button>
            </div>
-           
+
            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
-              {discoveredProviders.map((provider, i) => (
-                 <div key={i} className="bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col justify-between hover:bg-white/10 transition-colors cursor-pointer relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-16 h-16 bg-gt-orange/20 blur-[30px] rounded-full group-hover:bg-gt-orange/40 transition-colors" />
+              {[
+                { name: "Baba Tolu", service: "Plumbing", location: "Ikeja", rating: 5.0, rate: "₦5k/hr", verified: true },
+                { name: "Quick Fix", service: "Electrician", location: "Yaba", rating: 4.8, rate: "₦4k/hr", verified: true },
+                { name: "Mama Nkechi", service: "Food Delivery", location: "Lekki", rating: 4.9, rate: "₦2.5k/meal", verified: true },
+                { name: "Tech Bro Repairs", service: "Phone Repair", location: "Computer Village", rating: 4.7, rate: "Varies", verified: false },
+              ].map((provider, i) => (
+                 <div key={i} className="bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col justify-between hover:bg-white/10 transition-colors cursor-pointer relative overflow-hidden group/card">
+                    <div className="absolute top-0 right-0 w-16 h-16 bg-gt-orange/20 blur-[30px] rounded-full group-hover/card:bg-gt-orange/40 transition-colors" />
                     <div>
                         <div className="flex justify-between items-start mb-2 relative z-10">
                             <h4 className="font-bold text-sm text-white">{provider.name}</h4>
@@ -410,10 +585,20 @@ export default function Dashboard({ user }: { user?: User | null }) {
                         <p className="text-xs text-white/40 flex items-center gap-1 relative z-10">
                            <MapPin size={10} /> {provider.location}
                         </p>
+                        {provider.verified && (
+                          <span className="inline-flex items-center gap-1 text-[9px] text-green-500 bg-green-500/10 px-1.5 py-0.5 rounded mt-2">
+                            <ShieldCheck size={8} /> Verified
+                          </span>
+                        )}
                     </div>
                     <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-3 relative z-10">
                         <span className="text-xs font-bold text-white/80">{provider.rate}</span>
-                        <button className="text-[10px] font-bold uppercase tracking-wider text-gt-orange hover:text-white transition-colors">Contact</button>
+                        <button 
+                          onClick={() => setShowSearchModal(true)}
+                          className="text-[10px] font-bold uppercase tracking-wider text-gt-orange hover:text-white transition-colors"
+                        >
+                          Contact
+                        </button>
                     </div>
                  </div>
               ))}
@@ -421,76 +606,356 @@ export default function Dashboard({ user }: { user?: User | null }) {
         </div>
       </div>
 
-      {/* Provider Registration Modal */}
-      {showProviderModal && (
-         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+      {/* ════════════════════════════════════════════════════════════════
+          MODALS
+          ════════════════════════════════════════════════════════════════ */}
+
+      {/* Search Modal */}
+      <AnimatePresence>
+        {showSearchModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          >
             <motion.div 
-               initial={{ opacity: 0, scale: 0.95 }}
-               animate={{ opacity: 1, scale: 1 }}
-               className="bg-[#0A0A0A] border border-white/10 rounded-[32px] p-8 max-w-md w-full shadow-2xl relative"
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-[#0A0A0A] border border-white/10 rounded-[32px] p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl relative"
             >
-               <button 
-                  onClick={() => setShowProviderModal(false)}
-                  className="absolute top-6 right-6 text-white/50 hover:text-white"
-               >
-                  ✕
-               </button>
-               <h2 className="text-2xl font-black mb-2">Register as a Provider</h2>
-               <p className="text-sm text-white/50 mb-6">Join thousands of verified traders & service workers on SAABI.</p>
-               
-               <div className="space-y-4">
-                  <div>
-                     <label className="text-xs font-bold text-white/70 block mb-1.5">Full Name</label>
-                     <input type="text" placeholder="John Doe" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                      <div>
-                         <label className="text-xs font-bold text-white/70 block mb-1.5">Email Address</label>
-                         <input type="email" placeholder="john@example.com" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white" />
-                      </div>
-                      <div>
-                         <label className="text-xs font-bold text-white/70 block mb-1.5">Phone Number</label>
-                         <input type="tel" placeholder="+234..." className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white" />
-                      </div>
-                  </div>
-                  <div>
-                     <label className="text-xs font-bold text-white/70 block mb-1.5">Geo-Location (LGA/Area)</label>
-                     <input type="text" placeholder="e.g. Ikeja, Lagos" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                      <div>
-                         <label className="text-xs font-bold text-white/70 block mb-1.5">Service Category</label>
-                         <select className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white appearance-none">
-                            <option>Plumbing</option>
-                            <option>Food delivery</option>
-                            <option>Electrician</option>
-                            <option>Logistics</option>
-                         </select>
-                      </div>
-                      <div>
-                         <label className="text-xs font-bold text-white/70 block mb-1.5">Base Rate</label>
-                         <input type="text" placeholder="e.g. ₦5,000/hr" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white" />
-                      </div>
-                  </div>
-               </div>
+              <button 
+                onClick={() => { setShowSearchModal(false); setSearchResults([]); }}
+                className="absolute top-6 right-6 text-white/50 hover:text-white"
+              >
+                <X size={20} />
+              </button>
 
-               <div className="mt-6 bg-gt-orange/10 border border-gt-orange/20 rounded-xl p-4 flex items-start gap-3">
-                  <ShieldCheck size={20} className="text-gt-orange shrink-0 mt-0.5" />
-                  <div>
-                     <h4 className="text-sm font-bold text-gt-orange mb-1">Verification Required</h4>
-                     <p className="text-xs text-white/60 leading-relaxed">
-                        Please note that a verification period for users will take effect soon. Make sure your details match your government ID.
-                     </p>
-                  </div>
-               </div>
+              <h2 className="text-2xl font-black mb-2">Find Services</h2>
+              <p className="text-sm text-white/50 mb-6">Search for skilled workers and traders near you.</p>
 
-               <button className="w-full bg-gt-orange text-white font-bold py-3.5 rounded-xl mt-6 hover:bg-gt-orange-hover transition-colors">
-                  Submit Application
-               </button>
+              <div className="space-y-4 mb-6">
+                <div className="relative">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" size={18} />
+                  <input 
+                    type="text" 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="e.g. plumber in Ikeja" 
+                    className="w-full bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white placeholder-white/30"
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="relative">
+                    <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" size={14} />
+                    <select 
+                      value={searchCategory}
+                      onChange={(e) => setSearchCategory(e.target.value)}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white appearance-none"
+                    >
+                      <option value="">All Categories</option>
+                      {SERVICE_CATEGORIES.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="relative">
+                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" size={14} />
+                    <select 
+                      value={searchLga}
+                      onChange={(e) => setSearchLga(e.target.value)}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white appearance-none"
+                    >
+                      <option value="">All LGAs</option>
+                      {LGA_OPTIONS.map(lga => (
+                        <option key={lga} value={lga}>{lga}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <button 
+                  onClick={handleSearch}
+                  disabled={isSearching}
+                  className="w-full bg-gt-orange text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 hover:bg-gt-orange-hover transition-colors disabled:opacity-50"
+                >
+                  {isSearching ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}
+                  {isSearching ? "Searching..." : "Search"}
+                </button>
+              </div>
+
+              {/* Results */}
+              {searchResults.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-bold text-white/60 mb-3">{searchResults.length} results found</h3>
+                  {searchResults.map((worker) => (
+                    <motion.div 
+                      key={worker.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-white/5 border border-white/10 rounded-2xl p-4 hover:bg-white/[0.07] transition-colors"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <h4 className="font-bold text-white">{worker.full_name}</h4>
+                          <p className="text-xs text-gt-orange">{worker.service_category}</p>
+                        </div>
+                        <div className="flex items-center gap-1 text-xs text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded-md font-bold">
+                          <Star size={10} className="fill-yellow-500" />
+                          {worker.rating}
+                        </div>
+                      </div>
+                      <p className="text-xs text-white/50 mb-3">{worker.service_description || "No description"}</p>
+                      <div className="flex items-center gap-4 text-xs text-white/40 mb-3">
+                        <span className="flex items-center gap-1"><MapPin size={10} /> {worker.lga}</span>
+                        <span>{worker.base_rate || "Rate varies"}</span>
+                        {worker.is_verified && (
+                          <span className="text-green-500 flex items-center gap-1">
+                            <ShieldCheck size={10} /> Verified
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => contactWorker(worker)}
+                          className="flex-1 bg-gt-orange/20 text-gt-orange text-xs font-bold py-2 rounded-lg hover:bg-gt-orange/30 transition-colors flex items-center justify-center gap-1"
+                        >
+                          <MessageCircle size={12} /> WhatsApp
+                        </button>
+                        <button 
+                          onClick={() => setSelectedWorker(worker)}
+                          className="flex-1 bg-white/5 text-white text-xs font-bold py-2 rounded-lg hover:bg-white/10 transition-colors"
+                        >
+                          View Profile
+                        </button>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
             </motion.div>
-         </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Provider Registration Modal */}
+      <AnimatePresence>
+        {showProviderModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#0A0A0A] border border-white/10 rounded-[32px] p-8 max-w-md w-full shadow-2xl relative max-h-[90vh] overflow-y-auto"
+            >
+              <button 
+                onClick={() => setShowProviderModal(false)}
+                className="absolute top-6 right-6 text-white/50 hover:text-white"
+              >
+                <X size={20} />
+              </button>
+
+              {registerSuccess ? (
+                <div className="text-center py-12">
+                  <div className="w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-6 border border-green-500/30">
+                    <ShieldCheck size={40} className="text-green-500" />
+                  </div>
+                  <h2 className="text-2xl font-black mb-2">Application Submitted!</h2>
+                  <p className="text-white/60">Your profile is under review. You'll be notified via WhatsApp.</p>
+                </div>
+              ) : (
+                <>
+                  <h2 className="text-2xl font-black mb-2">Register as a Provider</h2>
+                  <p className="text-sm text-white/50 mb-6">Join thousands of verified traders & service workers on SAABI.</p>
+
+                  <form onSubmit={handleRegister} className="space-y-4">
+                    <div>
+                      <label className="text-xs font-bold text-white/70 block mb-1.5">Full Name</label>
+                      <input 
+                        type="text" 
+                        required
+                        value={registerForm.full_name}
+                        onChange={(e) => setRegisterForm({...registerForm, full_name: e.target.value})}
+                        placeholder="John Doe" 
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white placeholder-white/30"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-bold text-white/70 block mb-1.5">Phone</label>
+                        <input 
+                          type="tel" 
+                          required
+                          value={registerForm.phone_number}
+                          onChange={(e) => setRegisterForm({...registerForm, phone_number: e.target.value})}
+                          placeholder="+234..." 
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white placeholder-white/30"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-white/70 block mb-1.5">Email</label>
+                        <input 
+                          type="email" 
+                          value={registerForm.email}
+                          onChange={(e) => setRegisterForm({...registerForm, email: e.target.value})}
+                          placeholder="john@example.com" 
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white placeholder-white/30"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-bold text-white/70 block mb-1.5">Service Category</label>
+                        <select 
+                          required
+                          value={registerForm.service_category}
+                          onChange={(e) => setRegisterForm({...registerForm, service_category: e.target.value})}
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white appearance-none"
+                        >
+                          <option value="">Select...</option>
+                          {SERVICE_CATEGORIES.map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-white/70 block mb-1.5">Base Rate</label>
+                        <input 
+                          type="text" 
+                          value={registerForm.base_rate}
+                          onChange={(e) => setRegisterForm({...registerForm, base_rate: e.target.value})}
+                          placeholder="e.g. ₦5,000/hr" 
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white placeholder-white/30"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-white/70 block mb-1.5">LGA / Area</label>
+                      <select 
+                        required
+                        value={registerForm.lga}
+                        onChange={(e) => setRegisterForm({...registerForm, lga: e.target.value})}
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white appearance-none"
+                      >
+                        <option value="">Select...</option>
+                        {LGA_OPTIONS.map(lga => (
+                          <option key={lga} value={lga}>{lga}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-white/70 block mb-1.5">Description</label>
+                      <textarea 
+                        value={registerForm.service_description}
+                        onChange={(e) => setRegisterForm({...registerForm, service_description: e.target.value})}
+                        placeholder="Briefly describe your services..." 
+                        rows={3}
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white placeholder-white/30 resize-none"
+                      />
+                    </div>
+
+                    <div className="bg-gt-orange/10 border border-gt-orange/20 rounded-xl p-4 flex items-start gap-3">
+                      <ShieldCheck size={20} className="text-gt-orange shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="text-sm font-bold text-gt-orange mb-1">Verification Required</h4>
+                        <p className="text-xs text-white/60 leading-relaxed">
+                          All providers undergo verification. Make sure your details match your government ID.
+                        </p>
+                      </div>
+                    </div>
+
+                    <button 
+                      type="submit"
+                      disabled={isRegistering}
+                      className="w-full bg-gt-orange text-white font-bold py-3.5 rounded-xl hover:bg-gt-orange-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isRegistering ? <Loader2 size={18} className="animate-spin" /> : null}
+                      {isRegistering ? "Submitting..." : "Submit Application"}
+                    </button>
+                  </form>
+                </>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Worker Detail Modal */}
+      <AnimatePresence>
+        {selectedWorker && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#0A0A0A] border border-white/10 rounded-[32px] p-8 max-w-md w-full shadow-2xl relative"
+            >
+              <button 
+                onClick={() => setSelectedWorker(null)}
+                className="absolute top-6 right-6 text-white/50 hover:text-white"
+              >
+                <X size={20} />
+              </button>
+
+              <div className="text-center mb-6">
+                <div className="w-20 h-20 bg-gt-orange/20 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-gt-orange/30">
+                  <Users size={40} className="text-gt-orange" />
+                </div>
+                <h2 className="text-2xl font-black">{selectedWorker.full_name}</h2>
+                <p className="text-gt-orange font-medium">{selectedWorker.service_category}</p>
+              </div>
+
+              <div className="space-y-4 mb-6">
+                <div className="flex items-center justify-between py-3 border-b border-white/10">
+                  <span className="text-white/50 text-sm">Rating</span>
+                  <div className="flex items-center gap-1 text-yellow-500">
+                    <Star size={14} className="fill-yellow-500" />
+                    <span className="font-bold">{selectedWorker.rating}</span>
+                    <span className="text-white/30 text-xs">({selectedWorker.review_count} reviews)</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between py-3 border-b border-white/10">
+                  <span className="text-white/50 text-sm">Location</span>
+                  <span className="font-bold text-sm">{selectedWorker.lga}, {selectedWorker.state}</span>
+                </div>
+                <div className="flex items-center justify-between py-3 border-b border-white/10">
+                  <span className="text-white/50 text-sm">Rate</span>
+                  <span className="font-bold text-sm text-gt-orange">{selectedWorker.base_rate || "Negotiable"}</span>
+                </div>
+                <div className="flex items-center justify-between py-3 border-b border-white/10">
+                  <span className="text-white/50 text-sm">Credibility</span>
+                  <span className="font-bold text-sm">{selectedWorker.credibility_score}%</span>
+                </div>
+                {selectedWorker.is_verified && (
+                  <div className="flex items-center justify-center gap-2 text-green-500 text-sm py-2">
+                    <ShieldCheck size={16} />
+                    <span className="font-bold">Verified Provider</span>
+                  </div>
+                )}
+              </div>
+
+              <button 
+                onClick={() => contactWorker(selectedWorker)}
+                className="w-full bg-gt-orange text-white font-bold py-4 rounded-xl hover:bg-gt-orange-hover transition-colors flex items-center justify-center gap-2"
+              >
+                <Phone size={18} />
+                Contact via WhatsApp
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
-

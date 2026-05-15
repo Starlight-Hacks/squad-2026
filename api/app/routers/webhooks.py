@@ -18,6 +18,7 @@ import logging
 from typing import Annotated, Any, Optional
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, status
+
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from twilio.request_validator import RequestValidator
@@ -29,8 +30,12 @@ from app.services import payments, whatsapp
 from app.services.intent_parser import Intent, IntentKind
 from app.services.intent_parser import parse as parse_intent
 
+
+
 router = APIRouter(prefix='/webhooks', tags=['webhooks'])
 logger = logging.getLogger(__name__)
+
+
 
 
 @router.post('/twilio/whatsapp')

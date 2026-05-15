@@ -1,8 +1,13 @@
+from functools import lru_cache
+
 from pydantic.fields import computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+
+    app_name: str = "SAABI API"
+    debug: bool = False
     database_host: str
     database_port: int
     database_password: str
@@ -27,6 +32,11 @@ class Settings(BaseSettings):
     twilio_join_code: str
     twilio_demo_mode: bool
 
+    # Security
+    jwt_secret: str
+    jwt_algorithm: str = "HS256"
+    jwt_expiration_hours: int = 24
+
     model_config = SettingsConfigDict(env_file='.env')
 
     @computed_field
@@ -38,4 +48,9 @@ class Settings(BaseSettings):
         )
 
 
-settings = Settings()  # pyright: ignore[reportCallIssue]
+@lru_cache()
+def get_settings() -> Settings:
+    return Settings()
+
+
+settings = get_settings()

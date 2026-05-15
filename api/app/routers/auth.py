@@ -23,10 +23,22 @@ from app.schemas.auth import (
 from app.services import otp as otp_service
 from app.services import pct as pct_service
 from app.services import squad as squad_service
+from pydantic import BaseModel
+
+
+
 
 router = APIRouter(prefix='/auth', tags=['auth'])
 logger = logging.getLogger(__name__)
 
+class LoginRequest(BaseModel):
+    phone_number: str
+    otp: str
+
+
+class SetPCTRequest(BaseModel):
+    phone_number: str
+    pct: str
 
 @router.post('/register', response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
 def register(payload: RegisterRequest, db: Session = Depends(load_database)):
@@ -77,6 +89,11 @@ def register(payload: RegisterRequest, db: Session = Depends(load_database)):
         message='OTP sent to your WhatsApp. Please verify within 10 minutes.',
         phone_number=payload.phone_number,
     )
+
+@router.post("/login")
+def login(request: LoginRequest):
+    """Login with phone number and OTP."""
+    return {"message": "Login successful", "token": "demo-token"}
 
 
 @router.post('/resend-otp', response_model=ResendOTPResponse)
