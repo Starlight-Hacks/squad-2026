@@ -67,6 +67,12 @@ envs:
     value: HS256
   - key: JWT_EXPIRATION_HOURS
     value: "24"
+  - key: OTEL_ENABLED
+    value: "false"
+  - key: OTEL_SERVICE_NAME
+    value: saabi-api
+  - key: OTEL_EXPORTER_OTLP_ENDPOINT
+    value: http://tempo:4317
 
 services:
   - name: api
