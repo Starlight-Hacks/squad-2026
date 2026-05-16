@@ -1,12 +1,12 @@
 #!/bin/bash
 
-read -p '> Deploy a new app instance on Digital Ocean (y/n): ' should_deploy_new 
+read -p "> Deploy a new app instance on Digital Ocean (y/n): " should_deploy_new 
 
 if [ "$should_deploy_new" = "y" ]; then
-    read -p '> Spec file (relative directory): ' spec_file
+    read -p "> Spec file (relative directory): " spec_file
 
     if [ -z "$spec_file" ]; then
-        echo -e '\n> Error: Please provide a spec file!\n'
+        echo -e "\n> Error: Please provide a spec file!\n"
         exit 1
     fi
 
@@ -25,21 +25,21 @@ if [ "$should_deploy_new" = "y" ]; then
     doctl apps create --spec "$spec_file"
 
 elif [ "$should_deploy_new" = "n" ]; then
-    read -p '> App ID: ' app_id
+    read -p "> App ID: " app_id
 
     if [ -z "$app_id" ]; then
-        echo -e '\n> Error: Please provide an app id\n'
+        echo -e "\n> Error: Please provide an app id\n"
     fi
 
-    read -p '> Spec file (relative directory): ' spec_file
+    read -p "> Spec file (relative directory): " spec_file
 
     if [ -z "$spec_file" ]; then
-        echo -e '\n> Error: Please provide a spec file!\n'
-        exit 1
+        echo -e "\n> Falling back to default app.local.yml\n"
+        spec_file=./.do/app.local.yml
     fi
 
     doctl apps update "$app_id" --spec "$spec_file"
 else
-    echo -e "\n> Error: Please use either 'y' or 'n'\n"
+    echo -e "\n> Error: Please use either y or n\n"
     exit 1
 fi
