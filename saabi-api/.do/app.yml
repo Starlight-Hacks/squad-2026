@@ -61,6 +61,12 @@ envs:
     value: join <your-sandbox-keyword>
   - key: TWILIO_DEMO_MODE
     value: "true"
+  - key: JWT_SECRET
+    value: PUT_VALUE_HERE
+  - key: JWT_ALGORITHM
+    value: HS256
+  - key: JWT_EXPIRATION_HOURS
+    value: "24"
 
 services:
   - name: api
