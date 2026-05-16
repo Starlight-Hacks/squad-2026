@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.observability import setup_api_observability
 from app.routers import auth, wallet, webhooks
-from app.router import router as squad_router
+# from app.router import router as squad_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,10 +30,7 @@ setup_api_observability(app)
 app.include_router(auth.router)
 app.include_router(wallet.router)
 app.include_router(webhooks.router)
-app.include_router(squad_router)
-
-
-
+# app.include_router(squad_router)
 
 
 @app.get('/', status_code=200)
