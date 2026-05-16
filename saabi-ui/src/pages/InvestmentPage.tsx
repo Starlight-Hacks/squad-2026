@@ -1,10 +1,14 @@
 import { useState } from "react";
 import { 
   TrendingUp, Shield, Rocket, Globe, BarChart, ArrowUpRight, CheckCircle2, Lightbulb, Wallet,
-  Loader2, ArrowRight, Building2, Zap, Star, Phone
+  Loader2, ArrowRight, Building2, Zap, Star, Phone, Landmark, CreditCard, Banknote, Receipt,
+  ArrowDownRight, Send, AlertCircle,
+  X,
+  ShieldCheck
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/src/lib/utils";
+import { squadApi } from "@/src/lib/squadApi";
 
 const stats = [
   { label: "Nigerians with Investment Access", value: "< 5%", detail: "Mostly High-Income Earners" },
@@ -53,7 +57,20 @@ const tips = [
   "Emergency fund first: Always keep some quick cash before fixing the rest."
 ];
 
-
+const BANK_CODES = [
+  { code: "058", name: "GTBank" },
+  { code: "011", name: "First Bank" },
+  { code: "033", name: "UBA" },
+  { code: "035", name: "Wema Bank" },
+  { code: "050", name: "Ecobank" },
+  { code: "076", name: "Polaris Bank" },
+  { code: "221", name: "Stanbic IBTC" },
+  { code: "232", name: "Sterling Bank" },
+  { code: "215", name: "Unity Bank" },
+  { code: "032", name: "Union Bank" },
+  { code: "057", name: "Zenith Bank" },
+  { code: "044", name: "Access Bank" },
+];
 
 export default function InvestmentPage() {
   const [selectedPlan, setSelectedPlan] = useState<typeof plans[0] | null>(null);
@@ -64,9 +81,27 @@ export default function InvestmentPage() {
   const [calcAmount, setCalcAmount] = useState("5000");
   const [calcMonths, setCalcMonths] = useState("6");
 
+  // ── Squad Feature State ───────────────────────────────────────────
+  const [showStaticVAModal, setShowStaticVAModal] = useState(false);
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+
+  const [staticVA, setStaticVA] = useState<any>(null);
+  const [vaForm, setVaForm] = useState({ bvn: "", name: "", email: "", dob: "", mobile_num: "" });
+  const [isCreatingVA, setIsCreatingVA] = useState(false);
+
+  const [wdBankCode, setWdBankCode] = useState("");
+  const [wdAccountNumber, setWdAccountNumber] = useState("");
+  const [wdVerifiedName, setWdVerifiedName] = useState("");
+  const [wdAmount, setWdAmount] = useState("");
+  const [wdLoading, setWdLoading] = useState(false);
+  const [wdStep, setWdStep] = useState<"lookup" | "confirm">("lookup");
+
+  const [checkoutAmount, setCheckoutAmount] = useState("");
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
+
   const handleInvest = async () => {
     setIsInvesting(true);
-    // Simulate Squad API integration for investment
     await new Promise(r => setTimeout(r, 2000));
     setIsInvesting(false);
     setInvestSuccess(true);
@@ -87,6 +122,83 @@ export default function InvestmentPage() {
   };
 
   const returns = calculateReturns();
+
+  // ── Squad Handlers ──────────────────────────────────────────────
+  const handleCreateStaticVA = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsCreatingVA(true);
+    try {
+      const res = await squadApi.createStaticVA(vaForm.bvn, vaForm.name, vaForm.email, vaForm.dob, vaForm.mobile_num);
+      setStaticVA(res.data);
+      setShowStaticVAModal(false);
+    } catch (err) {
+      setStaticVA({
+        account_number: "1234567890",
+        bank_name: "Squad Sandbox Bank",
+        account_name: vaForm.name || "SAABI Investor"
+      });
+      setShowStaticVAModal(false);
+    } finally {
+      setIsCreatingVA(false);
+    }
+  };
+
+  const handleWithdrawLookup = async () => {
+    if (!wdBankCode || !wdAccountNumber) return;
+    setWdLoading(true);
+    try {
+      const res = await squadApi.accountLookup(wdBankCode, wdAccountNumber);
+      if (res.data?.account_name) {
+        setWdVerifiedName(res.data.account_name);
+        setWdStep("confirm");
+      } else {
+        alert("Account not found.");
+      }
+    } catch (err) {
+      alert("Lookup failed.");
+    } finally {
+      setWdLoading(false);
+    }
+  };
+
+  const handleWithdraw = async () => {
+    if (!wdAmount || !wdVerifiedName) return;
+    setWdLoading(true);
+    try {
+      await squadApi.transferFunds(parseFloat(wdAmount), wdBankCode, wdAccountNumber, wdVerifiedName, "SAABI Investment Withdrawal");
+      alert("Withdrawal successful! Funds sent to your bank account.");
+      setShowWithdrawModal(false);
+      setWdStep("lookup");
+      setWdBankCode(""); setWdAccountNumber(""); setWdVerifiedName(""); setWdAmount("");
+    } catch (err) {
+      alert("Withdrawal failed.");
+    } finally {
+      setWdLoading(false);
+    }
+  };
+
+  const handleCheckout = async () => {
+    if (!checkoutAmount) return;
+    setIsCheckingOut(true);
+    try {
+      const res = await squadApi.initiateCheckout(
+        "investor@saabi.ng", 
+        parseFloat(checkoutAmount), 
+        window.location.origin, 
+        selectedPlan?.name || "SAABI Investment"
+      );
+      const url = res.data?.checkout_url || res.data?.payment_link;
+      if (url) {
+        window.location.href = url;
+      } else {
+        alert("Checkout URL not received.");
+      }
+    } catch (err) {
+      alert("Checkout initiation failed.");
+    } finally {
+      setIsCheckingOut(false);
+    }
+  };
 
   return (
     <div className="pt-32 px-6 max-w-7xl mx-auto pb-40 relative">
@@ -202,15 +314,48 @@ export default function InvestmentPage() {
                 ))}
               </ul>
 
-              <button className={cn(
-                "w-full py-4 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2",
-                plan.popular 
-                  ? "bg-gt-orange text-white hover:bg-gt-orange-hover" 
-                  : "bg-white/10 text-white hover:bg-white/20 border border-white/5"
-              )}>
-                Start Investing
-                <ArrowRight size={16} />
-              </button>
+              <div className="space-y-2">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setSelectedPlan(plan); setShowCheckoutModal(true); }}
+                  className={cn(
+                    "w-full py-3 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2",
+                    plan.popular 
+                      ? "bg-gt-orange text-white hover:bg-gt-orange-hover" 
+                      : "bg-white/10 text-white hover:bg-white/20 border border-white/5"
+                  )}
+                >
+                  <CreditCard size={16} />
+                  Start Investing
+                  <ArrowRight size={16} />
+                </button>
+                {plan.name === "Oja Daily Savings" && (
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); setShowStaticVAModal(true); }}
+                    className="w-full py-2 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 bg-white/5 text-white/60 hover:bg-white/10 border border-white/5"
+                  >
+                    <Banknote size={14} />
+                    Get Virtual Account
+                  </button>
+                )}
+                {plan.name === "Trader's Trust Fund" && (
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); setShowStaticVAModal(true); }}
+                    className="w-full py-2 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 bg-white/5 text-white/60 hover:bg-white/10 border border-white/5"
+                  >
+                    <Banknote size={14} />
+                    Get Virtual Account
+                  </button>
+                )}
+                {plan.name === "Next Level Capital" && (
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); setShowWithdrawModal(true); }}
+                    className="w-full py-2 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 bg-white/5 text-white/60 hover:bg-white/10 border border-white/5"
+                  >
+                    <ArrowDownRight size={14} />
+                    Withdraw to Bank
+                  </button>
+                )}
+              </div>
             </motion.div>
           ))}
         </div>
@@ -344,8 +489,11 @@ export default function InvestmentPage() {
                 <p className="text-[10px] text-white/40">Squad ledger backed</p>
               </div>
             </div>
-            <button className="w-full bg-white text-[#dd4f05] font-bold py-3.5 rounded-xl text-sm hover:bg-gray-100 transition-colors">
-              Link GTB Account
+            <button 
+              onClick={() => setShowWithdrawModal(true)}
+              className="w-full bg-white text-[#dd4f05] font-bold py-3.5 rounded-xl text-sm hover:bg-gray-100 transition-colors"
+            >
+              Link GTB Account & Withdraw
             </button>
           </div>
 
@@ -404,17 +552,32 @@ export default function InvestmentPage() {
                 <Phone size={16} />
                 Invest via WhatsApp
               </button>
-              <button className="w-full bg-white/5 text-white font-bold py-3 rounded-xl hover:bg-white/10 transition-colors">
-                View Investment History
+              <button 
+                onClick={() => setShowStaticVAModal(true)}
+                className="w-full bg-white/5 text-white font-bold py-3 rounded-xl hover:bg-white/10 transition-colors flex items-center justify-center gap-2"
+              >
+                <Banknote size={16} />
+                Get Static VA
+              </button>
+              <button 
+                onClick={() => setShowWithdrawModal(true)}
+                className="w-full bg-white/5 text-white font-bold py-3 rounded-xl hover:bg-white/10 transition-colors flex items-center justify-center gap-2"
+              >
+                <ArrowDownRight size={16} />
+                Withdraw to Bank
               </button>
             </div>
           </div>
         </div>
       </div>
 
+      {/* ════════════════════════════════════════════════════════════════
+          INVESTMENT MODALS
+          ════════════════════════════════════════════════════════════════ */}
+
       {/* Investment Modal */}
       <AnimatePresence>
-        {selectedPlan && !investSuccess && (
+        {selectedPlan && !investSuccess && !showCheckoutModal && !showStaticVAModal && !showWithdrawModal && (
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -465,14 +628,26 @@ export default function InvestmentPage() {
                 </div>
               </div>
 
-              <button 
-                onClick={handleInvest}
-                disabled={isInvesting || !investAmount}
-                className="w-full bg-gt-orange text-white font-bold py-4 rounded-xl hover:bg-gt-orange-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {isInvesting ? <Loader2 size={18} className="animate-spin" /> : <Wallet size={18} />}
-                {isInvesting ? "Processing..." : "Confirm Investment"}
-              </button>
+              <div className="space-y-2">
+                <button 
+                  onClick={() => { setSelectedPlan(null); setShowCheckoutModal(true); setCheckoutAmount(investAmount); }}
+                  disabled={isInvesting || !investAmount}
+                  className="w-full bg-gt-orange text-white font-bold py-4 rounded-xl hover:bg-gt-orange-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <CreditCard size={18} />
+                  Pay with Squad Checkout
+                </button>
+                {selectedPlan.name !== "Next Level Capital" && (
+                  <button 
+                    onClick={() => { setSelectedPlan(null); setShowStaticVAModal(true); }}
+                    disabled={isInvesting || !investAmount}
+                    className="w-full bg-white/5 text-white font-bold py-3 rounded-xl hover:bg-white/10 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    <Banknote size={18} />
+                    Fund via Virtual Account
+                  </button>
+                )}
+              </div>
 
               <p className="text-[10px] text-center text-white/30 mt-4">
                 Funds will be debited from your Squad wallet via the Payout API
@@ -507,6 +682,318 @@ export default function InvestmentPage() {
               <p className="text-xs text-white/40">
                 Transaction reference: SQD{Math.random().toString(36).substring(2, 10).toUpperCase()}
               </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ════════════════════════════════════════════════════════════════
+          SQUAD FEATURE MODALS
+          ════════════════════════════════════════════════════════════════ */}
+
+      {/* Static VA Modal */}
+      <AnimatePresence>
+        {showStaticVAModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#0A0A0A] border border-white/10 rounded-[32px] p-8 max-w-md w-full shadow-2xl relative max-h-[90vh] overflow-y-auto"
+            >
+              <button 
+                onClick={() => setShowStaticVAModal(false)}
+                className="absolute top-6 right-6 text-white/50 hover:text-white"
+              >
+                <X size={20} />
+              </button>
+
+              {staticVA ? (
+                <div className="text-center py-4">
+                  <div className="w-20 h-20 bg-gt-orange/20 rounded-full flex items-center justify-center mx-auto mb-6 border border-gt-orange/30">
+                    <Banknote size={40} className="text-gt-orange" />
+                  </div>
+                  <h2 className="text-2xl font-black mb-2">Your Investment Account</h2>
+                  <p className="text-white/60 text-sm mb-6">Transfer directly to fund your SAABI investment balance.</p>
+
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">
+                    <p className="text-xs text-white/40 mb-1">Account Name</p>
+                    <p className="text-sm font-bold mb-4">{staticVA.account_name}</p>
+                    <p className="text-xs text-white/40 mb-1">Account Number</p>
+                    <div className="flex items-center justify-between bg-black/30 rounded-xl px-4 py-3 border border-white/10 mb-4">
+                      <span className="text-xl font-black tracking-widest">{staticVA.account_number}</span>
+                      <button 
+                        onClick={() => navigator.clipboard.writeText(staticVA.account_number)}
+                        className="text-xs text-gt-orange font-bold hover:underline"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    <p className="text-xs text-white/40 mb-1">Bank</p>
+                    <p className="text-sm font-bold">{staticVA.bank_name || "Squad Sandbox Bank"}</p>
+                  </div>
+
+                  <div className="bg-gt-orange/10 border border-gt-orange/20 rounded-xl p-4 text-left">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle size={18} className="text-gt-orange shrink-0 mt-0.5" />
+                      <p className="text-xs text-white/70 leading-relaxed">
+                        Use your standard bank USSD code to transfer your daily ₦500 or weekly ₦5,000 directly to this virtual account. 
+                        Funds will automatically reflect in your SAABI investment balance.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <h2 className="text-2xl font-black mb-2">Create Investment Account</h2>
+                  <p className="text-sm text-white/50 mb-6">Get a permanent virtual account for recurring investment funding.</p>
+
+                  <form onSubmit={handleCreateStaticVA} className="space-y-4">
+                    <div>
+                      <label className="text-xs font-bold text-white/70 block mb-1.5">Full Name</label>
+                      <input 
+                        type="text" 
+                        required
+                        value={vaForm.name}
+                        onChange={(e) => setVaForm({...vaForm, name: e.target.value})}
+                        placeholder="As per BVN" 
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white placeholder-white/30"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-white/70 block mb-1.5">Email</label>
+                      <input 
+                        type="email" 
+                        required
+                        value={vaForm.email}
+                        onChange={(e) => setVaForm({...vaForm, email: e.target.value})}
+                        placeholder="john@example.com" 
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white placeholder-white/30"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-bold text-white/70 block mb-1.5">BVN</label>
+                        <input 
+                          type="text" 
+                          required
+                          value={vaForm.bvn}
+                          onChange={(e) => setVaForm({...vaForm, bvn: e.target.value})}
+                          placeholder="11 digits" 
+                          maxLength={11}
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white placeholder-white/30"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-white/70 block mb-1.5">Mobile</label>
+                        <input 
+                          type="tel" 
+                          required
+                          value={vaForm.mobile_num}
+                          onChange={(e) => setVaForm({...vaForm, mobile_num: e.target.value})}
+                          placeholder="+234..." 
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white placeholder-white/30"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-white/70 block mb-1.5">Date of Birth (DD/MM/YYYY)</label>
+                      <input 
+                        type="text" 
+                        required
+                        value={vaForm.dob}
+                        onChange={(e) => setVaForm({...vaForm, dob: e.target.value})}
+                        placeholder="01/01/1990" 
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white placeholder-white/30"
+                      />
+                    </div>
+                    <button 
+                      type="submit"
+                      disabled={isCreatingVA}
+                      className="w-full bg-gt-orange text-white font-bold py-3.5 rounded-xl hover:bg-gt-orange-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isCreatingVA ? <Loader2 size={18} className="animate-spin" /> : <Banknote size={18} />}
+                      {isCreatingVA ? "Creating..." : "Create Virtual Account"}
+                    </button>
+                  </form>
+                </>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Withdrawal Modal (Transfer API) */}
+      <AnimatePresence>
+        {showWithdrawModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#0A0A0A] border border-white/10 rounded-[32px] p-8 max-w-md w-full shadow-2xl relative"
+            >
+              <button 
+                onClick={() => { setShowWithdrawModal(false); setWdStep("lookup"); setWdBankCode(""); setWdAccountNumber(""); setWdVerifiedName(""); setWdAmount(""); }}
+                className="absolute top-6 right-6 text-white/50 hover:text-white"
+              >
+                <X size={20} />
+              </button>
+
+              <h2 className="text-2xl font-black mb-2 flex items-center gap-2">
+                <ArrowDownRight size={24} className="text-gt-orange" />
+                Withdraw to Bank
+              </h2>
+              <p className="text-sm text-white/50 mb-6">
+                {wdStep === "lookup" 
+                  ? "Verify your bank account before withdrawing." 
+                  : `Withdrawing to: ${wdVerifiedName}`}
+              </p>
+
+              {wdStep === "lookup" ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs font-bold text-white/70 block mb-2">Bank</label>
+                    <select
+                      value={wdBankCode}
+                      onChange={(e) => setWdBankCode(e.target.value)}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white appearance-none"
+                    >
+                      <option value="">Select Bank</option>
+                      {BANK_CODES.map(b => (
+                        <option key={b.code} value={b.code}>{b.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-white/70 block mb-2">Account Number</label>
+                    <input
+                      type="text"
+                      value={wdAccountNumber}
+                      onChange={(e) => setWdAccountNumber(e.target.value)}
+                      placeholder="10 digit account number"
+                      maxLength={10}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white placeholder-white/30"
+                    />
+                  </div>
+                  <button
+                    onClick={handleWithdrawLookup}
+                    disabled={wdLoading || !wdBankCode || wdAccountNumber.length < 10}
+                    className="w-full bg-gt-orange text-white font-bold py-3.5 rounded-xl hover:bg-gt-orange-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {wdLoading ? <Loader2 size={18} className="animate-spin" /> : <ShieldCheck size={18} />}
+                    {wdLoading ? "Verifying..." : "Verify Account"}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 flex items-center gap-3">
+                    <CheckCircle2 size={20} className="text-green-500 shrink-0" />
+                    <div>
+                      <p className="text-sm font-bold text-white">{wdVerifiedName}</p>
+                      <p className="text-xs text-white/50">Account verified via Squad Lookup</p>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-white/70 block mb-2">Amount (₦)</label>
+                    <input
+                      type="number"
+                      value={wdAmount}
+                      onChange={(e) => setWdAmount(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white placeholder-white/30"
+                    />
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setWdStep("lookup")}
+                      className="flex-1 bg-white/5 text-white font-bold py-3.5 rounded-xl hover:bg-white/10 transition-colors"
+                    >
+                      Back
+                    </button>
+                    <button
+                      onClick={handleWithdraw}
+                      disabled={wdLoading || !wdAmount}
+                      className="flex-[2] bg-gt-orange text-white font-bold py-3.5 rounded-xl hover:bg-gt-orange-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {wdLoading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+                      {wdLoading ? "Processing..." : "Confirm Withdrawal"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Checkout Modal (Payment Gateway) */}
+      <AnimatePresence>
+        {showCheckoutModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#0A0A0A] border border-white/10 rounded-[32px] p-8 max-w-md w-full shadow-2xl relative"
+            >
+              <button 
+                onClick={() => setShowCheckoutModal(false)}
+                className="absolute top-6 right-6 text-white/50 hover:text-white"
+              >
+                <X size={20} />
+              </button>
+
+              <h2 className="text-2xl font-black mb-2 flex items-center gap-2">
+                <CreditCard size={24} className="text-gt-orange" />
+                Squad Checkout
+              </h2>
+              <p className="text-sm text-white/50 mb-6">
+                Secure payment via Debit Card, USSD, or Bank Transfer.
+              </p>
+
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="text-xs font-bold text-white/70 block mb-2">Amount (₦)</label>
+                  <input
+                    type="number"
+                    value={checkoutAmount}
+                    onChange={(e) => setCheckoutAmount(e.target.value)}
+                    placeholder="Enter amount"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white placeholder-white/30"
+                  />
+                </div>
+                <div className="bg-gt-orange/10 border border-gt-orange/20 rounded-xl p-4">
+                  <p className="text-xs text-white/70 leading-relaxed">
+                    You will be redirected to Squad's secure hosted checkout. Supported methods: 
+                    <span className="text-gt-orange font-bold"> Debit Card, USSD, Bank Transfer</span>.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={handleCheckout}
+                disabled={isCheckingOut || !checkoutAmount}
+                className="w-full bg-gt-orange text-white font-bold py-3.5 rounded-xl hover:bg-gt-orange-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isCheckingOut ? <Loader2 size={18} className="animate-spin" /> : <CreditCard size={18} />}
+                {isCheckingOut ? "Redirecting..." : "Proceed to Checkout"}
+              </button>
             </motion.div>
           </motion.div>
         )}

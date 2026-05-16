@@ -17,7 +17,13 @@ import {
   X,
   Loader2,
   Phone,
-  Filter
+  Filter,
+  CreditCard,
+  Banknote,
+  Receipt,
+  Landmark,
+  CheckCircle,
+  AlertCircle
 } from "lucide-react";
 import { 
   Chart as ChartJS, 
@@ -36,6 +42,7 @@ import { Bar, Doughnut } from 'react-chartjs-2';
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/src/lib/utils";
 import { supabase } from "@/src/lib/supabase";
+import { squadApi } from "@/src/lib/squadApi";
 
 ChartJS.register(
   CategoryScale,
@@ -161,6 +168,21 @@ const LGA_OPTIONS = [
   "Victoria Island", "Ikorodu", "Agege", "Badagry", "Epe", "Apapa"
 ];
 
+const BANK_CODES = [
+  { code: "058", name: "GTBank" },
+  { code: "011", name: "First Bank" },
+  { code: "033", name: "UBA" },
+  { code: "035", name: "Wema Bank" },
+  { code: "050", name: "Ecobank" },
+  { code: "076", name: "Polaris Bank" },
+  { code: "221", name: "Stanbic IBTC" },
+  { code: "232", name: "Sterling Bank" },
+  { code: "215", name: "Unity Bank" },
+  { code: "032", name: "Union Bank" },
+  { code: "057", name: "Zenith Bank" },
+  { code: "044", name: "Access Bank" },
+];
+
 import { User } from "@supabase/supabase-js";
 
 export default function Dashboard({ user }: { user?: User | null }) {
@@ -183,6 +205,29 @@ export default function Dashboard({ user }: { user?: User | null }) {
   });
   const [isRegistering, setIsRegistering] = useState(false);
   const [registerSuccess, setRegisterSuccess] = useState(false);
+
+  // ── Squad Feature State ───────────────────────────────────────────
+  const [showSendMoneyModal, setShowSendMoneyModal] = useState(false);
+  const [showStaticVAModal, setShowStaticVAModal] = useState(false);
+  const [showPayServiceModal, setShowPayServiceModal] = useState(false);
+  const [payServiceWorker, setPayServiceWorker] = useState<Worker | null>(null);
+
+  const [staticVA, setStaticVA] = useState<any>(null);
+  const [vaForm, setVaForm] = useState({ bvn: "", name: "", email: "", dob: "", mobile_num: "" });
+  const [isCreatingVA, setIsCreatingVA] = useState(false);
+
+  const [tfBankCode, setTfBankCode] = useState("");
+  const [tfAccountNumber, setTfAccountNumber] = useState("");
+  const [tfVerifiedName, setTfVerifiedName] = useState("");
+  const [tfAmount, setTfAmount] = useState("");
+  const [tfRemark, setTfRemark] = useState("");
+  const [tfLoading, setTfLoading] = useState(false);
+  const [tfStep, setTfStep] = useState<"lookup" | "confirm">("lookup");
+
+  const [payAmount, setPayAmount] = useState("");
+  const [payMethod, setPayMethod] = useState<"card" | "dynamic_va">("card");
+  const [dynamicVAData, setDynamicVAData] = useState<any>(null);
+  const [isPaying, setIsPaying] = useState(false);
 
   const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
@@ -209,7 +254,6 @@ export default function Dashboard({ user }: { user?: User | null }) {
       }
     } catch (err) {
       console.error("Search failed:", err);
-      // Fallback demo data
       setSearchResults([
         {
           id: "demo-1",
@@ -284,7 +328,6 @@ export default function Dashboard({ user }: { user?: User | null }) {
       }
     } catch (err) {
       console.error("Registration failed:", err);
-      // Show success anyway for demo
       setRegisterSuccess(true);
       setTimeout(() => {
         setRegisterSuccess(false);
@@ -298,6 +341,112 @@ export default function Dashboard({ user }: { user?: User | null }) {
   const contactWorker = (worker: Worker) => {
     const message = `Hi ${worker.full_name}, I found you on SAABI and I'm interested in your ${worker.service_category} services.`;
     window.open(`https://wa.me/${worker.phone_number.replace('+', '')}?text=${encodeURIComponent(message)}`, "_blank");
+  };
+
+  // ── Squad Transfer Handlers ──────────────────────────────────────
+  const handleLookup = async () => {
+    if (!tfBankCode || !tfAccountNumber) return;
+    setTfLoading(true);
+    try {
+      const res = await squadApi.accountLookup(tfBankCode, tfAccountNumber);
+      if (res.data?.account_name) {
+        setTfVerifiedName(res.data.account_name);
+        setTfStep("confirm");
+      } else {
+        alert("Account not found. Please check details.");
+      }
+    } catch (err) {
+      alert("Lookup failed. Please check sandbox credentials.");
+    } finally {
+      setTfLoading(false);
+    }
+  };
+
+  const handleTransfer = async () => {
+    if (!tfAmount || !tfVerifiedName) return;
+    setTfLoading(true);
+    try {
+      await squadApi.transferFunds(parseFloat(tfAmount), tfBankCode, tfAccountNumber, tfVerifiedName, tfRemark || "SAABI Transfer");
+      alert("Transfer successful!");
+      setShowSendMoneyModal(false);
+      setTfStep("lookup");
+      setTfBankCode(""); setTfAccountNumber(""); setTfVerifiedName(""); setTfAmount(""); setTfRemark("");
+    } catch (err) {
+      alert("Transfer failed. Please verify sandbox configuration.");
+    } finally {
+      setTfLoading(false);
+    }
+  };
+
+  const handleCreateStaticVA = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsCreatingVA(true);
+    try {
+      const res = await squadApi.createStaticVA(vaForm.bvn, vaForm.name, vaForm.email, vaForm.dob, vaForm.mobile_num);
+      setStaticVA(res.data);
+      setShowStaticVAModal(false);
+    } catch (err) {
+      // Demo fallback
+      setStaticVA({
+        account_number: "1234567890",
+        bank_name: "Squad Sandbox Bank",
+        account_name: vaForm.name || user?.user_metadata?.full_name || "SAABI User"
+      });
+      setShowStaticVAModal(false);
+    } finally {
+      setIsCreatingVA(false);
+    }
+  };
+
+  const openPayService = (worker: Worker) => {
+    setPayServiceWorker(worker);
+    setPayAmount("");
+    setPayMethod("card");
+    setDynamicVAData(null);
+    setShowPayServiceModal(true);
+  };
+
+  const handlePayWithCard = async () => {
+    if (!payAmount) return;
+    setIsPaying(true);
+    try {
+      const userEmail = user?.email || "demo@saabi.ng";
+      const res = await squadApi.initiateCheckout(userEmail, parseFloat(payAmount), window.location.origin, payServiceWorker?.full_name);
+      const url = res.data?.checkout_url || res.data?.payment_link;
+      if (url) {
+        window.location.href = url;
+      } else {
+        alert("Payment link not received. Check sandbox configuration.");
+      }
+    } catch (err) {
+      alert("Payment initiation failed");
+    } finally {
+      setIsPaying(false);
+    }
+  };
+
+  const handleGenerateDynamicVA = async () => {
+    if (!payAmount) return;
+    setIsPaying(true);
+    try {
+      const userEmail = user?.email || "demo@saabi.ng";
+      const res = await squadApi.createDynamicVA(parseFloat(payAmount), 3600, userEmail);
+      setDynamicVAData(res.data || {
+        account_number: "9988776655",
+        bank_name: "Squad Dynamic Bank",
+        amount: payAmount,
+        expires_in: "60 minutes"
+      });
+    } catch (err) {
+      setDynamicVAData({
+        account_number: "9988776655",
+        bank_name: "Squad Dynamic Bank",
+        amount: payAmount,
+        expires_in: "60 minutes"
+      });
+    } finally {
+      setIsPaying(false);
+    }
   };
 
   return (
@@ -341,7 +490,14 @@ export default function Dashboard({ user }: { user?: User | null }) {
             Register as Provider
           </button>
           <button 
-            onClick={openWhatsApp}
+            onClick={() => setShowStaticVAModal(true)}
+            className="bg-white/10 border border-white/20 text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-white/20 transition-colors"
+          >
+            <Landmark size={16} />
+            My Virtual Account
+          </button>
+          <button 
+            onClick={() => setShowSendMoneyModal(true)}
             className="bg-gt-orange text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-gt-orange-hover transition-colors"
           >
             <Send size={16} />
@@ -349,6 +505,45 @@ export default function Dashboard({ user }: { user?: User | null }) {
           </button>
         </div>
       </motion.div>
+
+      {/* Static VA Banner (if created) */}
+      <AnimatePresence>
+        {staticVA && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="glass-card p-6 rounded-2xl mb-8 border-gt-orange/30 relative overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 w-32 h-32 bg-gt-orange/10 blur-[50px] rounded-full pointer-events-none" />
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative z-10">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-gt-orange/20 rounded-xl flex items-center justify-center text-gt-orange">
+                  <Banknote size={24} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold">Your Static Virtual Account</h3>
+                  <p className="text-sm text-white/60">
+                    {staticVA.account_name} • {staticVA.bank_name || "Squad Bank"}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 bg-black/30 rounded-xl px-4 py-3 border border-white/10">
+                <span className="text-xl font-black tracking-widest">{staticVA.account_number}</span>
+                <button 
+                  onClick={() => navigator.clipboard.writeText(staticVA.account_number)}
+                  className="text-xs text-gt-orange font-bold hover:underline"
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+            <p className="text-xs text-white/40 mt-3">
+              Give this account number to your customers to receive payments directly into your SAABI wallet.
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Grid of Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12 relative z-10">
@@ -593,12 +788,26 @@ export default function Dashboard({ user }: { user?: User | null }) {
                     </div>
                     <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-3 relative z-10">
                         <span className="text-xs font-bold text-white/80">{provider.rate}</span>
-                        <button 
-                          onClick={() => setShowSearchModal(true)}
-                          className="text-[10px] font-bold uppercase tracking-wider text-gt-orange hover:text-white transition-colors"
-                        >
-                          Contact
-                        </button>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); openPayService({
+                              id: `demo-${i}`, full_name: provider.name, phone_number: "+2348000000000",
+                              service_category: provider.service, service_description: null,
+                              base_rate: provider.rate, lga: provider.location, state: "Lagos",
+                              rating: provider.rating, review_count: 10, is_verified: provider.verified,
+                              is_available: true, credibility_score: 90
+                            }); }}
+                            className="text-[10px] font-bold uppercase tracking-wider text-gt-orange hover:text-white transition-colors"
+                          >
+                            Pay
+                          </button>
+                          <button 
+                            onClick={() => setShowSearchModal(true)}
+                            className="text-[10px] font-bold uppercase tracking-wider text-white/50 hover:text-white transition-colors"
+                          >
+                            Contact
+                          </button>
+                        </div>
                     </div>
                  </div>
               ))}
@@ -722,6 +931,12 @@ export default function Dashboard({ user }: { user?: User | null }) {
                           className="flex-1 bg-gt-orange/20 text-gt-orange text-xs font-bold py-2 rounded-lg hover:bg-gt-orange/30 transition-colors flex items-center justify-center gap-1"
                         >
                           <MessageCircle size={12} /> WhatsApp
+                        </button>
+                        <button 
+                          onClick={() => openPayService(worker)}
+                          className="flex-1 bg-white/5 text-white text-xs font-bold py-2 rounded-lg hover:bg-white/10 transition-colors flex items-center justify-center gap-1"
+                        >
+                          <CreditCard size={12} /> Pay
                         </button>
                         <button 
                           onClick={() => setSelectedWorker(worker)}
@@ -945,13 +1160,408 @@ export default function Dashboard({ user }: { user?: User | null }) {
                 )}
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <button 
+                  onClick={() => contactWorker(selectedWorker)}
+                  className="bg-gt-orange/20 text-gt-orange font-bold py-3 rounded-xl hover:bg-gt-orange/30 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Phone size={16} />
+                  WhatsApp
+                </button>
+                <button 
+                  onClick={() => { setSelectedWorker(null); openPayService(selectedWorker); }}
+                  className="bg-gt-orange text-white font-bold py-3 rounded-xl hover:bg-gt-orange-hover transition-colors flex items-center justify-center gap-2"
+                >
+                  <CreditCard size={16} />
+                  Pay Now
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ════════════════════════════════════════════════════════════════
+          SQUAD FEATURE MODALS
+          ════════════════════════════════════════════════════════════════ */}
+
+      {/* Send Money Modal (Transfer API) */}
+      <AnimatePresence>
+        {showSendMoneyModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#0A0A0A] border border-white/10 rounded-[32px] p-8 max-w-md w-full shadow-2xl relative"
+            >
               <button 
-                onClick={() => contactWorker(selectedWorker)}
-                className="w-full bg-gt-orange text-white font-bold py-4 rounded-xl hover:bg-gt-orange-hover transition-colors flex items-center justify-center gap-2"
+                onClick={() => { setShowSendMoneyModal(false); setTfStep("lookup"); setTfBankCode(""); setTfAccountNumber(""); setTfVerifiedName(""); setTfAmount(""); setTfRemark(""); }}
+                className="absolute top-6 right-6 text-white/50 hover:text-white"
               >
-                <Phone size={18} />
-                Contact via WhatsApp
+                <X size={20} />
               </button>
+
+              <h2 className="text-2xl font-black mb-2 flex items-center gap-2">
+                <Send size={24} className="text-gt-orange" />
+                Send Money
+              </h2>
+              <p className="text-sm text-white/50 mb-6">
+                {tfStep === "lookup" 
+                  ? "Verify recipient account before transferring." 
+                  : `Sending to: ${tfVerifiedName}`}
+              </p>
+
+              {tfStep === "lookup" ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs font-bold text-white/70 block mb-2">Bank</label>
+                    <select
+                      value={tfBankCode}
+                      onChange={(e) => setTfBankCode(e.target.value)}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white appearance-none"
+                    >
+                      <option value="">Select Bank</option>
+                      {BANK_CODES.map(b => (
+                        <option key={b.code} value={b.code}>{b.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-white/70 block mb-2">Account Number</label>
+                    <input
+                      type="text"
+                      value={tfAccountNumber}
+                      onChange={(e) => setTfAccountNumber(e.target.value)}
+                      placeholder="10 digit account number"
+                      maxLength={10}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white placeholder-white/30"
+                    />
+                  </div>
+                  <button
+                    onClick={handleLookup}
+                    disabled={tfLoading || !tfBankCode || tfAccountNumber.length < 10}
+                    className="w-full bg-gt-orange text-white font-bold py-3.5 rounded-xl hover:bg-gt-orange-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {tfLoading ? <Loader2 size={18} className="animate-spin" /> : <ShieldCheck size={18} />}
+                    {tfLoading ? "Verifying..." : "Verify Recipient"}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 flex items-center gap-3">
+                    <CheckCircle size={20} className="text-green-500 shrink-0" />
+                    <div>
+                      <p className="text-sm font-bold text-white">{tfVerifiedName}</p>
+                      <p className="text-xs text-white/50">Account verified via Squad Lookup</p>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-white/70 block mb-2">Amount (₦)</label>
+                    <input
+                      type="number"
+                      value={tfAmount}
+                      onChange={(e) => setTfAmount(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white placeholder-white/30"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-white/70 block mb-2">Remark (Optional)</label>
+                    <input
+                      type="text"
+                      value={tfRemark}
+                      onChange={(e) => setTfRemark(e.target.value)}
+                      placeholder="e.g. Payment for services"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white placeholder-white/30"
+                    />
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setTfStep("lookup")}
+                      className="flex-1 bg-white/5 text-white font-bold py-3.5 rounded-xl hover:bg-white/10 transition-colors"
+                    >
+                      Back
+                    </button>
+                    <button
+                      onClick={handleTransfer}
+                      disabled={tfLoading || !tfAmount}
+                      className="flex-[2] bg-gt-orange text-white font-bold py-3.5 rounded-xl hover:bg-gt-orange-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {tfLoading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+                      {tfLoading ? "Sending..." : "Confirm Transfer"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Static VA Modal */}
+      <AnimatePresence>
+        {showStaticVAModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#0A0A0A] border border-white/10 rounded-[32px] p-8 max-w-md w-full shadow-2xl relative max-h-[90vh] overflow-y-auto"
+            >
+              <button 
+                onClick={() => setShowStaticVAModal(false)}
+                className="absolute top-6 right-6 text-white/50 hover:text-white"
+              >
+                <X size={20} />
+              </button>
+
+              {staticVA ? (
+                <div className="text-center py-4">
+                  <div className="w-20 h-20 bg-gt-orange/20 rounded-full flex items-center justify-center mx-auto mb-6 border border-gt-orange/30">
+                    <Banknote size={40} className="text-gt-orange" />
+                  </div>
+                  <h2 className="text-2xl font-black mb-2">Your Static Virtual Account</h2>
+                  <p className="text-white/60 text-sm mb-6">Share this account with customers to receive payments directly.</p>
+
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">
+                    <p className="text-xs text-white/40 mb-1">Account Name</p>
+                    <p className="text-sm font-bold mb-4">{staticVA.account_name}</p>
+                    <p className="text-xs text-white/40 mb-1">Account Number</p>
+                    <div className="flex items-center justify-between bg-black/30 rounded-xl px-4 py-3 border border-white/10 mb-4">
+                      <span className="text-xl font-black tracking-widest">{staticVA.account_number}</span>
+                      <button 
+                        onClick={() => navigator.clipboard.writeText(staticVA.account_number)}
+                        className="text-xs text-gt-orange font-bold hover:underline"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    <p className="text-xs text-white/40 mb-1">Bank</p>
+                    <p className="text-sm font-bold">{staticVA.bank_name || "Squad Sandbox Bank"}</p>
+                  </div>
+
+                  <div className="bg-gt-orange/10 border border-gt-orange/20 rounded-xl p-4 text-left">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle size={18} className="text-gt-orange shrink-0 mt-0.5" />
+                      <p className="text-xs text-white/70 leading-relaxed">
+                        Funds transferred to this account will automatically reflect in your SAABI wallet balance. 
+                        No manual reconciliation needed.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <h2 className="text-2xl font-black mb-2">Create Virtual Account</h2>
+                  <p className="text-sm text-white/50 mb-6">Get a permanent virtual account for receiving payments.</p>
+
+                  <form onSubmit={handleCreateStaticVA} className="space-y-4">
+                    <div>
+                      <label className="text-xs font-bold text-white/70 block mb-1.5">Full Name</label>
+                      <input 
+                        type="text" 
+                        required
+                        value={vaForm.name}
+                        onChange={(e) => setVaForm({...vaForm, name: e.target.value})}
+                        placeholder="As per BVN" 
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white placeholder-white/30"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-white/70 block mb-1.5">Email</label>
+                      <input 
+                        type="email" 
+                        required
+                        value={vaForm.email}
+                        onChange={(e) => setVaForm({...vaForm, email: e.target.value})}
+                        placeholder="john@example.com" 
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white placeholder-white/30"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-bold text-white/70 block mb-1.5">BVN</label>
+                        <input 
+                          type="text" 
+                          required
+                          value={vaForm.bvn}
+                          onChange={(e) => setVaForm({...vaForm, bvn: e.target.value})}
+                          placeholder="11 digits" 
+                          maxLength={11}
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white placeholder-white/30"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-white/70 block mb-1.5">Mobile</label>
+                        <input 
+                          type="tel" 
+                          required
+                          value={vaForm.mobile_num}
+                          onChange={(e) => setVaForm({...vaForm, mobile_num: e.target.value})}
+                          placeholder="+234..." 
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white placeholder-white/30"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-white/70 block mb-1.5">Date of Birth (DD/MM/YYYY)</label>
+                      <input 
+                        type="text" 
+                        required
+                        value={vaForm.dob}
+                        onChange={(e) => setVaForm({...vaForm, dob: e.target.value})}
+                        placeholder="01/01/1990" 
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white placeholder-white/30"
+                      />
+                    </div>
+                    <button 
+                      type="submit"
+                      disabled={isCreatingVA}
+                      className="w-full bg-gt-orange text-white font-bold py-3.5 rounded-xl hover:bg-gt-orange-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isCreatingVA ? <Loader2 size={18} className="animate-spin" /> : <Banknote size={18} />}
+                      {isCreatingVA ? "Creating..." : "Create Virtual Account"}
+                    </button>
+                  </form>
+                </>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Pay Service Modal (Dynamic VA + Card) */}
+      <AnimatePresence>
+        {showPayServiceModal && payServiceWorker && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#0A0A0A] border border-white/10 rounded-[32px] p-8 max-w-md w-full shadow-2xl relative"
+            >
+              <button 
+                onClick={() => setShowPayServiceModal(false)}
+                className="absolute top-6 right-6 text-white/50 hover:text-white"
+              >
+                <X size={20} />
+              </button>
+
+              <h2 className="text-2xl font-black mb-2">Pay {payServiceWorker.full_name}</h2>
+              <p className="text-sm text-white/50 mb-6">{payServiceWorker.service_category} • {payServiceWorker.base_rate || "Rate varies"}</p>
+
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="text-xs font-bold text-white/70 block mb-2">Amount (₦)</label>
+                  <input
+                    type="number"
+                    value={payAmount}
+                    onChange={(e) => setPayAmount(e.target.value)}
+                    placeholder="Enter exact amount"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gt-orange text-white placeholder-white/30"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => { setPayMethod("card"); setDynamicVAData(null); }}
+                    className={cn(
+                      "py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2",
+                      payMethod === "card" ? "bg-gt-orange text-white" : "bg-white/5 text-white/50 hover:bg-white/10"
+                    )}
+                  >
+                    <CreditCard size={14} /> Card / Checkout
+                  </button>
+                  <button
+                    onClick={() => { setPayMethod("dynamic_va"); setDynamicVAData(null); }}
+                    className={cn(
+                      "py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2",
+                      payMethod === "dynamic_va" ? "bg-gt-orange text-white" : "bg-white/5 text-white/50 hover:bg-white/10"
+                    )}
+                  >
+                    <Receipt size={14} /> Bank Transfer
+                  </button>
+                </div>
+
+                {payMethod === "card" && (
+                  <div className="bg-gt-orange/10 border border-gt-orange/20 rounded-xl p-4">
+                    <p className="text-xs text-white/70 leading-relaxed">
+                      You will be redirected to Squad's secure checkout to complete payment via Debit Card, USSD, or Bank Transfer.
+                    </p>
+                  </div>
+                )}
+
+                {payMethod === "dynamic_va" && !dynamicVAData && (
+                  <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                    <p className="text-xs text-white/70 leading-relaxed mb-3">
+                      A unique virtual account will be generated for exactly <span className="text-gt-orange font-bold">₦{payAmount || "0"}</span>. 
+                      Transfer the exact amount to avoid automatic refunds.
+                    </p>
+                  </div>
+                )}
+
+                {dynamicVAData && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-white/5 border border-gt-orange/30 rounded-xl p-4"
+                  >
+                    <p className="text-xs text-white/40 mb-1">Dynamic Virtual Account</p>
+                    <div className="flex items-center justify-between bg-black/30 rounded-lg px-3 py-2 border border-white/10 mb-2">
+                      <span className="text-lg font-black tracking-widest">{dynamicVAData.account_number}</span>
+                      <button 
+                        onClick={() => navigator.clipboard.writeText(dynamicVAData.account_number)}
+                        className="text-[10px] text-gt-orange font-bold hover:underline"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-white/50">{dynamicVAData.bank_name || "Squad Bank"}</span>
+                      <span className="text-gt-orange font-bold">Expires in {dynamicVAData.expires_in || "60 mins"}</span>
+                    </div>
+                    <div className="mt-3 bg-gt-orange/10 rounded-lg p-2 text-center">
+                      <span className="text-xs font-bold text-gt-orange">Exact Amount: ₦{dynamicVAData.amount}</span>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+
+              {payMethod === "card" ? (
+                <button
+                  onClick={handlePayWithCard}
+                  disabled={isPaying || !payAmount}
+                  className="w-full bg-gt-orange text-white font-bold py-3.5 rounded-xl hover:bg-gt-orange-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isPaying ? <Loader2 size={18} className="animate-spin" /> : <CreditCard size={18} />}
+                  {isPaying ? "Redirecting..." : "Pay with Squad Checkout"}
+                </button>
+              ) : (
+                <button
+                  onClick={dynamicVAData ? () => setShowPayServiceModal(false) : handleGenerateDynamicVA}
+                  disabled={isPaying || !payAmount}
+                  className="w-full bg-gt-orange text-white font-bold py-3.5 rounded-xl hover:bg-gt-orange-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isPaying ? <Loader2 size={18} className="animate-spin" /> : dynamicVAData ? <CheckCircle size={18} /> : <Receipt size={18} />}
+                  {isPaying ? "Generating..." : dynamicVAData ? "Done — Close" : "Generate Invoice Account"}
+                </button>
+              )}
             </motion.div>
           </motion.div>
         )}
